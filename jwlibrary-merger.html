@@ -548,6 +548,27 @@
   .conflict-table tr:hover td { background: var(--surface2); }
   .conflict-table tr:last-child td { border-bottom: none; }
   .badge-new { color: var(--success); font-weight: 600; }
+  .drop-zone.error { border-color: var(--danger); background: var(--danger-light); }
+  .file-meta { font-size: 0.7rem; color: var(--text3); font-family: monospace; line-height: 1.6; }
+  .warn-text { color: var(--warn); }
+  .pick-group { margin-top: 0.75rem; }
+  .pick-group summary { padding: 0.35rem 0; }
+  .pick-tools { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0.4rem 0; }
+  .pick-list {
+    max-height: 340px; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface2);
+  }
+  .pick-row {
+    display: flex; gap: 0.6rem; align-items: flex-start;
+    padding: 0.45rem 0.7rem; border-bottom: 1px solid var(--border);
+    font-size: 0.8rem; cursor: pointer;
+  }
+  .pick-row:last-child { border-bottom: none; }
+  .pick-row input { margin-top: 0.2rem; flex-shrink: 0; }
+  .pick-row .pick-main { word-break: break-word; }
+  .pick-row .pick-sub { font-size: 0.7rem; color: var(--text3); margin-top: 0.1rem; }
+  .conflict-table td.wrap { white-space: normal; max-width: 260px; }
   .badge-dup { color: var(--text3); }
 
   /* Tabs */
@@ -708,25 +729,16 @@
       </div>
     </div>
 
-    <div class="file-grid" id="fileGrid">
-      <div class="drop-zone" id="drop1">
-        <input type="file" accept=".jwlibrary" id="fileInput1" onchange="loadFile(0, this)">
-        <span class="drop-icon">&#128194;</span>
-        <div class="drop-label">Older backup</div>
-        <div class="drop-hint">drop or click to browse</div>
-      </div>
-      <div class="drop-zone" id="drop2">
-        <input type="file" accept=".jwlibrary" id="fileInput2" onchange="loadFile(1, this)">
-        <span class="drop-icon">&#128194;</span>
-        <div class="drop-label">Newer backup</div>
-        <div class="drop-hint">drop or click to browse</div>
-      </div>
-    </div>
+    <div class="file-grid" id="fileGrid"></div>
 
     <div class="actions">
       <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()" disabled>Analyse files</button>
-      <button class="btn btn-secondary" onclick="addSlot()" id="addMoreBtn">+ Add another file</button>
+      <span class="btn btn-secondary file-btn">Choose several files…
+        <input type="file" multiple onchange="addFilesToFreeSlots([...this.files]); this.value='';">
+      </span>
+      <button class="btn btn-secondary" onclick="addSlot()" id="addMoreBtn">+ Add another slot</button>
     </div>
+    <div class="small muted" style="margin-top:0.75rem;">The order doesn’t matter — files are sorted by date automatically. The newest backup is used as the base.</div>
   </div>
 
   <!-- Step 2: Analysis -->
@@ -735,25 +747,39 @@
       <div class="step-num">2</div>
       <div>
         <div class="step-title">Analysis</div>
-        <div class="step-sub">Duplicate check &amp; merge preview</div>
+        <div class="step-sub">Trial merge &amp; preview — nothing is saved yet</div>
       </div>
     </div>
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
     <div class="log-box" id="logBox"></div>
+    <div id="warnArea"></div>
     <div id="summaryArea" class="hidden">
       <hr>
       <div class="summary-grid" id="summaryGrid"></div>
       <div id="conflictArea" class="hidden">
         <hr>
-        <div style="font-size:0.85rem; color:var(--text2); margin-bottom:0.5rem;">
-          Notes with same GUID but different content (newest version will be kept):
+        <div class="step-title" style="font-size:0.88rem;">Notes edited differently on two devices</div>
+        <div class="small muted" style="margin:0.25rem 0 0.5rem;">
+          The most recently edited version stays as the note. The other one is kept as a separate note
+          titled “[Older version] …”, so nothing is lost — you can compare and delete it later in JW Library.
         </div>
-        <div style="overflow-x:auto;">
+        <div style="overflow:auto; max-height:300px;">
           <table class="conflict-table" id="conflictTable">
-            <thead><tr><th>GUID</th><th>Older title</th><th>Newer title</th><th>Kept</th></tr></thead>
+            <thead><tr><th>Note</th><th>Kept as the note</th><th>Saved as [Older version]</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
+      </div>
+      <div id="pickArea" class="hidden">
+        <hr>
+        <div class="step-title" style="font-size:0.88rem;">Items that will be added from older backups</div>
+        <div class="small muted" style="margin:0.25rem 0 0.5rem; line-height:1.6;">
+          JW Library doesn’t record deletions, so anything you deleted on the newest device would come back from an older backup.
+          Uncheck what you don’t want. Items marked <span class="warn-text">probably deleted</span> are missing from a newer backup
+          of the same device, so they start unchecked.
+        </div>
+        <input class="input" id="pickFind" type="search" placeholder="Search these items…" oninput="filterPicks()" style="width:100%;">
+        <div id="pickGroups"></div>
       </div>
       <div class="actions">
         <button class="btn btn-primary" id="mergeBtn" onclick="doMerge()">Merge &amp; download</button>
@@ -895,48 +921,131 @@
 
 <script>
 let SQL = null;
-let loadedFiles = [];
+let loadedFiles = [];      // per slot: { status: 'loading' | 'ok' | 'error', ... }
 let analysisResult = null;
 let slotCount = 2;
+let mergeUrl = null;
+const MAX_SLOTS = 6;
 
 // Shared promise: every loader awaits it, so picking a file before sql.js is ready no longer crashes.
 const sqlReady = initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` })
   .then(s => (SQL = s));
 
-function addSlot() {
-  if (slotCount >= 6) return;
-  const idx = slotCount;
-  slotCount++;
-  const grid = document.getElementById('fileGrid');
-  const div = document.createElement('div');
-  div.className = 'drop-zone';
-  div.id = `drop${idx+1}`;
-  div.innerHTML = `<input type="file" accept=".jwlibrary" id="fileInput${idx+1}" onchange="loadFile(${idx}, this)">
-    <span class="drop-icon">&#128194;</span>
-    <div class="drop-label">Backup ${idx+1}</div>
-    <div class="drop-hint">drop or click to browse</div>`;
-  grid.appendChild(div);
-  if (slotCount >= 6) document.getElementById('addMoreBtn').disabled = true;
+// ═══════════════════════════════════════════════════════════════════════════
+// STEP 1 — loading files
+// ═══════════════════════════════════════════════════════════════════════════
+function validDate(s) {
+  if (!s) return null;
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
 }
 
-async function loadFile(idx, input) {
-  const file = input.files[0];
-  if (!file) return;
-  // Show spinner while parsing
-  const drop = document.getElementById(`drop${idx+1}`);
-  if (drop) {
-    drop.innerHTML = `<div class="loading-card"><div class="spinner"></div><span>Reading file…</span></div>`;
+// When was this backup made? Manifest first; if that is missing or broken, fall back
+// to what the database says, and only then to the file's own date.
+function backupDate(manifest, db, file) {
+  let d = validDate(manifest.userDataBackup?.lastModifiedDate);
+  if (d) return { date: d, source: 'manifest' };
+  if (tableExists(db, 'LastModified')) {
+    d = validDate(q1(db, 'SELECT LastModified FROM LastModified LIMIT 1'));
+    if (d) return { date: d, source: 'database' };
   }
-  await sqlReady;
-  const ab = await file.arrayBuffer();
-  const zip = await JSZip.loadAsync(ab);
-  const manifest = JSON.parse(await zip.file('manifest.json').async('string'));
-  const dbBuf = await zip.file('userData.db').async('arraybuffer');
-  const db = new SQL.Database(new Uint8Array(dbBuf));
-  const stats = getStats(db);
-  loadedFiles[idx] = { file, ab, manifest, db, stats, zip };
-  renderFileCard(idx);
+  if (tableExists(db, 'Note')) {
+    d = validDate(q1(db, 'SELECT MAX(LastModified) FROM Note'));
+    if (d) return { date: d, source: 'newest note' };
+  }
+  return { date: new Date(file.lastModified || 0), source: 'file date' };
+}
+
+async function loadFile(idx, file) {
+  if (!file) return;
+  loadedFiles[idx]?.db?.close();
+  loadedFiles[idx] = { status: 'loading', name: file.name };
+  invalidateAnalysis();
+  renderGrid();
+  try {
+    await sqlReady;
+    const ab = await file.arrayBuffer();
+    const fileHash = await sha256hex(new Uint8Array(ab));
+    let zip;
+    try { zip = await JSZip.loadAsync(ab); }
+    catch (_) { throw new Error('Not a valid .jwlibrary file (it is not a ZIP archive).'); }
+    const mf = zip.file('manifest.json'), dbf = zip.file('userData.db');
+    if (!mf || !dbf) throw new Error('manifest.json or userData.db is missing.');
+    let manifest;
+    try { manifest = JSON.parse(await mf.async('string')); }
+    catch (_) { throw new Error('manifest.json is damaged.'); }
+    const db = openDb(prepDb(await dbf.async('uint8array')).bytes);
+    const when = backupDate(manifest, db, file);
+    loadedFiles[idx] = {
+      status: 'ok', file, manifest, db, zip, fileHash,
+      stats: getStats(db), date: when.date, dateSource: when.source,
+      device: manifest.userDataBackup?.deviceName || 'unknown device',
+      schema: manifest.userDataBackup?.schemaVersion,
+    };
+  } catch (e) {
+    console.error(e);
+    loadedFiles[idx] = { status: 'error', name: file.name, error: e.message };
+  }
+  renderGrid();
   checkAnalyzeReady();
+}
+
+function addFilesToFreeSlots(files) {
+  for (const f of files) {
+    let i = 0;
+    while (i < MAX_SLOTS && loadedFiles[i] && loadedFiles[i].status !== 'error') i++;
+    if (i >= MAX_SLOTS) { alert(`At most ${MAX_SLOTS} files can be merged at once.`); break; }
+    slotCount = Math.max(slotCount, i + 1);
+    loadFile(i, f);
+  }
+}
+
+function addSlot() {
+  if (slotCount >= MAX_SLOTS) return;
+  slotCount++;
+  renderGrid();
+}
+
+function removeFile(idx) {
+  loadedFiles[idx]?.db?.close();
+  loadedFiles[idx] = null;
+  invalidateAnalysis();
+  renderGrid();
+  checkAnalyzeReady();
+}
+
+function emptySlotInner(i, err) {
+  return `<input type="file" accept=".jwlibrary" onchange="loadFile(${i}, this.files[0])">
+    <span class="drop-icon">${err ? '&#9888;' : '&#128194;'}</span>
+    <div class="drop-label${err ? ' err-text' : ''}">${err ? `Could not open ${escHtml(err.name)}` : `Backup ${i + 1}`}</div>
+    <div class="drop-hint">${err ? `${escHtml(err.error)} — click to choose another file` : 'drop or click to browse'}</div>`;
+}
+
+function renderGrid() {
+  const ok = loadedFiles.map((f, i) => [f, i]).filter(([f]) => f?.status === 'ok');
+  document.getElementById('fileGrid').innerHTML = Array.from({ length: slotCount }, (_, i) => {
+    const f = loadedFiles[i];
+    if (f?.status === 'loading') {
+      return `<div class="drop-zone" data-slot="${i}"><div class="loading-card"><div class="spinner"></div><span>Reading ${escHtml(f.name)}…</span></div></div>`;
+    }
+    if (f?.status === 'error') return `<div class="drop-zone error" data-slot="${i}">${emptySlotInner(i, f)}</div>`;
+    if (f?.status !== 'ok') return `<div class="drop-zone" data-slot="${i}">${emptySlotInner(i)}</div>`;
+    const twin = ok.find(([g, j]) => j < i && g.fileHash === f.fileHash);
+    const s = f.stats;
+    return `<div class="drop-zone loaded" data-slot="${i}">
+      <button class="remove-btn" onclick="removeFile(${i})" title="Remove">&#10005;</button>
+      <div class="file-name">${escHtml(f.file.name)}</div>
+      <div class="file-meta">${escHtml(f.device)} · ${escHtml(f.date.toLocaleString())}
+        ${f.dateSource !== 'manifest' ? `<br><span class="warn-text">date taken from ${escHtml(f.dateSource)}</span>` : ''}
+        ${twin ? `<br><span class="warn-text">same file as backup ${twin[1] + 1} — will be ignored</span>` : ''}</div>
+      <div class="file-stats">
+        <span class="stat-pill">${s.Note} notes</span>
+        <span class="stat-pill">${s.UserMark} highlights</span>
+        <span class="stat-pill">${s.Bookmark} bookmarks</span>
+        <span class="stat-pill">${s.Tag} tags</span>
+      </div></div>`;
+  }).join('');
+  document.getElementById('addMoreBtn').disabled = slotCount >= MAX_SLOTS;
 }
 
 function getStats(db) {
@@ -949,39 +1058,21 @@ function getStats(db) {
   return counts;
 }
 
-function renderFileCard(idx) {
-  const drop = document.getElementById(`drop${idx+1}`);
-  const f = loadedFiles[idx];
-  const d = f.manifest.userDataBackup?.lastModifiedDate || f.manifest.creationDate || '';
-  const dateStr = d ? new Date(d).toLocaleDateString('en-GB', {year:'numeric',month:'short',day:'numeric'}) : '—';
-  const s = f.stats;
-  drop.classList.add('loaded');
-  drop.innerHTML = `
-    <button class="remove-btn" onclick="removeFile(${idx})" title="Remove">&#10005;</button>
-    <div class="file-name">${f.file.name}</div>
-    <div class="file-date">modified ${dateStr}</div>
-    <div class="file-stats">
-      <span class="stat-pill">${s.Note} notes</span>
-      <span class="stat-pill">${s.UserMark} highlights</span>
-      <span class="stat-pill">${s.Bookmark} bookmarks</span>
-      <span class="stat-pill">${s.Tag} tags</span>
-    </div>`;
-}
-
-function removeFile(idx) {
-  loadedFiles[idx] = null;
-  const drop = document.getElementById(`drop${idx+1}`);
-  drop.classList.remove('loaded');
-  drop.innerHTML = `<input type="file" accept=".jwlibrary" id="fileInput${idx+1}" onchange="loadFile(${idx}, this)">
-    <span class="drop-icon">&#128194;</span>
-    <div class="drop-label">Backup ${idx+1}</div>
-    <div class="drop-hint">drop or click to browse</div>`;
-  checkAnalyzeReady();
+// Loaded, de-duplicated files, oldest → newest.
+function activeFiles() {
+  const seen = new Set();
+  return loadedFiles.filter(f => f?.status === 'ok' && !seen.has(f.fileHash) && seen.add(f.fileHash))
+    .sort((a, b) => a.date - b.date);
 }
 
 function checkAnalyzeReady() {
-  const ready = loadedFiles.filter(Boolean).length >= 2;
-  document.getElementById('analyzeBtn').disabled = !ready;
+  document.getElementById('analyzeBtn').disabled = activeFiles().length < 2;
+}
+
+function invalidateAnalysis() {
+  analysisResult = null;
+  document.getElementById('step2').classList.add('hidden');
+  document.getElementById('step3').classList.add('hidden');
 }
 
 function log(msg, cls='') {
@@ -997,507 +1088,538 @@ function setProgress(p) {
   document.getElementById('progressFill').style.width = p + '%';
 }
 
-async function analyze() {
-  document.getElementById('step2').classList.remove('hidden');
-  document.getElementById('logBox').innerHTML = '';
-  setProgress(0);
+// ═══════════════════════════════════════════════════════════════════════════
+// MERGE ENGINE
+// Used twice: as a trial run for the analysis (nothing excluded) and for the
+// real merge (with the items the user unchecked). Same code → same numbers.
+// ═══════════════════════════════════════════════════════════════════════════
+const colCache = new WeakMap();
+function columnsOf(db, table) {
+  let m = colCache.get(db);
+  if (!m) colCache.set(db, m = {});
+  return m[table] ??= q(db, `PRAGMA table_info("${table}")`).map(c => c.name);
+}
 
-  const files = loadedFiles.filter(Boolean);
-  files.sort((a,b) => {
-    const da = new Date(a.manifest.userDataBackup?.lastModifiedDate || a.manifest.creationDate);
-    const db_ = new Date(b.manifest.userDataBackup?.lastModifiedDate || b.manifest.creationDate);
-    return da - db_;
+// Device-independent identity of a Location (its IDs differ between devices).
+const locSig = l => l ? [l.BookNumber, l.ChapterNumber, l.DocumentId, l.Track, l.IssueTagNumber, l.KeySymbol, l.MepsLanguage, l.Type].join('|') : '';
+
+function newGuid(like) {
+  let g;
+  if (crypto.randomUUID) g = crypto.randomUUID();
+  else {
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+    g = `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+  return like && like === like.toUpperCase() ? g.toUpperCase() : g;
+}
+
+const newerThan = (a, b) => (validDate(a)?.getTime() ?? 0) > (validDate(b)?.getTime() ?? 0);
+const OLDER_PREFIX = '[Older version] ';
+
+async function runMerge(files, { excluded = new Set(), progress = () => {} } = {}) {
+  const base = files[files.length - 1];
+  const out = new SQL.Database(base.db.export());
+  const res = {
+    db: out, errors: [], conflicts: [], candidates: [],
+    added: { notes: 0, marks: 0, bookmarks: 0, tags: 0, tagMaps: 0, inputFields: 0, playlistItems: 0, media: 0 },
+    bookmarkMoved: 0, bookmarkNoSlot: 0, oldVersions: 0,
+  };
+  const seenCandidates = new Set();
+  const oldVersionSeen = new Set();
+
+  // What each file contains — used to spot items deleted on purpose.
+  const presence = files.map(f => {
+    const L = new Map(tableExists(f.db, 'Location') ? q(f.db, 'SELECT * FROM Location').map(l => [l.LocationId, l]) : []);
+    return {
+      locs: L,
+      notes: new Set(tableExists(f.db, 'Note') ? q(f.db, 'SELECT Guid FROM Note').map(r => r.Guid) : []),
+      marks: new Set(tableExists(f.db, 'UserMark') ? q(f.db, 'SELECT UserMarkGuid FROM UserMark').map(r => r.UserMarkGuid) : []),
+      bookmarks: new Set(tableExists(f.db, 'Bookmark') ? q(f.db, 'SELECT * FROM Bookmark').map(b => bmSig(b, L)) : []),
+    };
   });
+  function bmSig(b, L) {
+    return `${locSig(L.get(b.PublicationLocationId))}#${locSig(L.get(b.LocationId))}#${b.BlockType}#${b.BlockIdentifier}`;
+  }
+  // Present in file fi but missing from a newer backup of the same device → probably deleted there.
+  function deletedOn(fi, kind, sig) {
+    for (let j = files.length - 1; j > fi; j--) {
+      if (files[j].device === files[fi].device && !presence[j][kind].has(sig)) return files[j];
+    }
+    return null;
+  }
+  // A newer backup of the same device also has it → this copy is just an earlier state, not a conflict.
+  function supersededOnSameDevice(fi, kind, sig) {
+    for (let j = fi + 1; j < files.length; j++) {
+      if (files[j].device === files[fi].device && presence[j][kind].has(sig)) return true;
+    }
+    return false;
+  }
+  function candidate(key, c) {
+    if (seenCandidates.has(key)) return;
+    seenCandidates.add(key);
+    res.candidates.push({ key, ...c });
+  }
 
-  log('Sorted files oldest → newest by modification date', 'info');
-  files.forEach((f,i) => {
-    const d = f.manifest.userDataBackup?.lastModifiedDate || f.manifest.creationDate;
-    log(`  [${i+1}] ${f.file.name}  (${new Date(d).toLocaleDateString()})`, 'info');
-  });
+  function insertRow(table, row, fk = {}, pkCol = null) {
+    const cols = columnsOf(out, table).filter(c => c !== pkCol && c in row);
+    const vals = cols.map(c => {
+      if (!fk[c]) return row[c];
+      const v = row[c];
+      if (v === null || v === undefined) return null;
+      return fk[c](v) ?? null;  // unmapped reference → NULL, never a raw ID from another device
+    });
+    try {
+      out.run(`INSERT INTO "${table}" (${cols.map(c => `"${c}"`).join(',')}) VALUES (${cols.map(() => '?').join(',')})`, vals);
+      return pkCol ? q1(out, 'SELECT last_insert_rowid()') : true;
+    } catch (e) {
+      res.errors.push(`${table}: ${e.message}`);
+      return null;
+    }
+  }
 
-  setProgress(10);
-  log('Analysing notes...', 'info');
-  await sleep(10);
+  // JW Library has two unique keys on Location — match on whichever applies.
+  function findLocation(l) {
+    if (l.BookNumber !== null && l.BookNumber !== undefined) {
+      return q1(out, `SELECT LocationId FROM Location WHERE BookNumber = ? AND ChapterNumber IS ?
+        AND KeySymbol IS ? AND MepsLanguage IS ? AND Type IS ?`,
+        [l.BookNumber, l.ChapterNumber, l.KeySymbol, l.MepsLanguage, l.Type]);
+    }
+    return q1(out, `SELECT LocationId FROM Location WHERE BookNumber IS NULL AND KeySymbol IS ?
+      AND IssueTagNumber IS ? AND MepsLanguage IS ? AND DocumentId IS ? AND Track IS ? AND Type IS ?`,
+      [l.KeySymbol, l.IssueTagNumber, l.MepsLanguage, l.DocumentId, l.Track, l.Type]);
+  }
 
-  const newestDb = files[files.length-1].db;
-  const newestStats = files[files.length-1].stats;
+  const has = (db, ...t) => t.every(n => tableExists(db, n));
+  out.run('BEGIN');
 
-  // Collect all GUIDs across files
-  let totalNewNotes = 0, totalNewMarks = 0, totalNewBookmarks = 0, totalNewTags = 0, totalNewInputs = 0;
-  const conflicts = [];
+  for (let fi = 0; fi < files.length - 1; fi++) {
+    const f = files[fi], src = f.db, srcLocs = presence[fi].locs;
+    progress(fi, f);
+    await sleep(0);
 
-  const newestNoteGuids = new Map();
-  newestDb.exec('SELECT Guid, Title, LastModified FROM Note').forEach(res => {
-    res.values.forEach(([g,t,m]) => newestNoteGuids.set(g, {title:t, mod:m}));
-  });
+    // ── Location: mapped lazily, inserted only when something really uses it ──
+    const locCache = new Map();
+    const mapLoc = (id, create = true) => {
+      if (id === null || id === undefined) return null;
+      if (locCache.has(id)) return locCache.get(id);
+      const l = srcLocs.get(id);
+      if (!l) return null;
+      let t = findLocation(l);
+      if (t === null && create) t = insertRow('Location', l, {}, 'LocationId');
+      if (t !== null) locCache.set(id, t);
+      return t;
+    };
 
-  for (let i = 0; i < files.length - 1; i++) {
-    const f = files[i];
-    log(`Checking ${f.file.name}...`);
-    const db = f.db;
+    // ── Tag: matched by (Type, Name), created when first needed ──
+    const srcTags = new Map(has(src, 'Tag') ? q(src, 'SELECT * FROM Tag').map(t => [t.TagId, t]) : []);
+    const tagCache = new Map();
+    const mapTag = id => {
+      if (tagCache.has(id)) return tagCache.get(id);
+      const t = srcTags.get(id);
+      if (!t) return null;
+      let tid = q1(out, 'SELECT TagId FROM Tag WHERE Type = ? AND Name = ?', [t.Type, t.Name]);
+      if (tid === null) {
+        tid = insertRow('Tag', t, {}, 'TagId');
+        if (tid !== null) res.added.tags++;
+      }
+      tagCache.set(id, tid);
+      return tid;
+    };
 
-    // Notes
-    const notes = db.exec('SELECT Guid, Title, LastModified FROM Note')[0]?.values || [];
-    let newN = 0, dupN = 0, conflN = 0;
-    for (const [guid, title, mod] of notes) {
-      if (!newestNoteGuids.has(guid)) { newN++; }
-      else {
-        const newer = newestNoteGuids.get(guid);
-        if (newer.title !== title) {
-          conflN++;
-          if (conflicts.length < 50) {
-            conflicts.push({ guid: guid.slice(0,8)+'...', oldTitle: title||'(no title)', newTitle: newer.title||'(no title)' });
-          }
-        } else { dupN++; }
+    // ── UserMark + BlockRange (highlights), matched by UserMarkGuid ──
+    const markMap = new Map();
+    if (has(src, 'UserMark') && has(out, 'UserMark')) {
+      const guidToId = new Map(q(out, 'SELECT UserMarkId, UserMarkGuid FROM UserMark').map(r => [r.UserMarkGuid, r.UserMarkId]));
+      const ranges = has(src, 'BlockRange') ? groupBy(q(src, 'SELECT * FROM BlockRange'), 'UserMarkId') : new Map();
+      for (const m of q(src, 'SELECT * FROM UserMark')) {
+        const existing = guidToId.get(m.UserMarkGuid);
+        if (existing !== undefined) { markMap.set(m.UserMarkId, existing); continue; }
+        const key = `M:${m.UserMarkGuid}`;
+        candidate(key, {
+          kind: 'marks', color: m.ColorIndex, label: rangeLabel(srcLocs.get(m.LocationId), ranges.get(m.UserMarkId)),
+          sub: MARK_COLOR_NAMES[m.ColorIndex] ?? '', file: f, deletedOn: deletedOn(fi, 'marks', m.UserMarkGuid),
+        });
+        if (excluded.has(key)) continue;
+        const id = insertRow('UserMark', m, { LocationId: mapLoc }, 'UserMarkId');
+        if (id === null) continue;
+        markMap.set(m.UserMarkId, id);
+        guidToId.set(m.UserMarkGuid, id);
+        res.added.marks++;
+        for (const br of ranges.get(m.UserMarkId) || []) insertRow('BlockRange', br, { UserMarkId: () => id }, 'BlockRangeId');
       }
     }
-    log(`  Notes: ${newN} new, ${dupN} duplicates (skipped), ${conflN} updated (newer version kept)`, newN > 0 ? 'ok' : '');
-    totalNewNotes += newN;
 
-    // UserMarks
-    const marks = db.exec('SELECT UserMarkGuid FROM UserMark')[0]?.values || [];
-    const newestMarkGuids = new Set(newestDb.exec('SELECT UserMarkGuid FROM UserMark')[0]?.values.map(r=>r[0]) || []);
-    const newM = marks.filter(([g]) => !newestMarkGuids.has(g)).length;
-    log(`  Highlights: ${newM} new, ${marks.length - newM} duplicates (skipped)`, newM > 0 ? 'ok' : '');
-    totalNewMarks += newM;
+    // ── Note, matched by Guid; conflicting edits keep both versions ──
+    const noteMap = new Map();
+    if (has(src, 'Note') && has(out, 'Note')) {
+      const guidToId = new Map(q(out, 'SELECT NoteId, Guid FROM Note').map(r => [r.Guid, r.NoteId]));
+      for (const n of q(src, 'SELECT * FROM Note')) {
+        const tid = guidToId.get(n.Guid);
+        if (tid !== undefined) {
+          noteMap.set(n.NoteId, tid);
+          if (supersededOnSameDevice(fi, 'notes', n.Guid)) continue;
+          const cur = q(out, 'SELECT * FROM Note WHERE NoteId = ?', [tid])[0];
+          if ((cur.Title ?? '') === (n.Title ?? '') && (cur.Content ?? '') === (n.Content ?? '')) continue;
+          // Edited differently on two devices: the most recently edited text wins.
+          const srcWins = newerThan(n.LastModified, cur.LastModified);
+          if (srcWins) {
+            out.run('UPDATE Note SET Title = ?, Content = ?, LastModified = ? WHERE NoteId = ?',
+              [n.Title, n.Content, n.LastModified, tid]);
+          }
+          const loser = srcWins ? cur : n;
+          const sig = `${n.Guid}|${loser.Title ?? ''}|${loser.Content ?? ''}`;
+          const excerpt = x => `${x.Title && x.Title !== n.Title ? x.Title + ': ' : ''}${(x.Content || '').slice(0, 120)}`;
+          const winner = srcWins ? n : cur;
+          res.conflicts.push({
+            title: winner.Title || '(no title)',
+            kept: `“${excerpt(winner)}” — edited ${fmtDate(winner.LastModified)}`,
+            other: `“${excerpt(loser)}” — edited ${fmtDate(loser.LastModified)}`,
+          });
+          if (oldVersionSeen.has(sig)) continue;
+          oldVersionSeen.add(sig);
+          const t = loser.Title ?? '';
+          const copy = { ...loser, Guid: newGuid(n.Guid), UserMarkId: null,
+                         Title: t.startsWith(OLDER_PREFIX) ? t : OLDER_PREFIX + t };
+          const ok = srcWins ? insertRow('Note', copy, {}, 'NoteId')                 // loser already uses target IDs
+                             : insertRow('Note', copy, { LocationId: mapLoc }, 'NoteId');
+          if (ok !== null) res.oldVersions++;
+          continue;
+        }
+        const key = `N:${n.Guid}`;
+        candidate(key, {
+          kind: 'notes', label: n.Title || '(no title)',
+          sub: `${locLabel(srcLocs.get(n.LocationId), n.BlockType, n.BlockIdentifier)}${n.Content ? ' · ' + n.Content.slice(0, 80) : ''}`,
+          file: f, deletedOn: deletedOn(fi, 'notes', n.Guid),
+        });
+        if (excluded.has(key)) continue;
+        const id = insertRow('Note', n, { LocationId: mapLoc, UserMarkId: x => markMap.get(x) }, 'NoteId');
+        if (id === null) continue;
+        noteMap.set(n.NoteId, id);
+        guidToId.set(n.Guid, id);
+        res.added.notes++;
+      }
+    }
 
-    // Tags
-    const tags = db.exec('SELECT Name FROM Tag')[0]?.values || [];
-    const newestTagNames = new Set(newestDb.exec('SELECT Name FROM Tag')[0]?.values.map(r=>r[0]) || []);
-    const newT = tags.filter(([n]) => !newestTagNames.has(n)).length;
-    if (newT > 0) log(`  Tags: ${newT} new`, 'ok');
-    totalNewTags += newT;
+    // ── Bookmark: slot is unique per publication, not globally ──
+    if (has(src, 'Bookmark') && has(out, 'Bookmark')) {
+      for (const b of q(src, 'SELECT * FROM Bookmark')) {
+        const pub0 = mapLoc(b.PublicationLocationId, false), loc0 = mapLoc(b.LocationId, false);
+        if (pub0 !== null && loc0 !== null && q1(out,
+          'SELECT 1 FROM Bookmark WHERE PublicationLocationId = ? AND LocationId = ? AND BlockType IS ? AND BlockIdentifier IS ?',
+          [pub0, loc0, b.BlockType, b.BlockIdentifier])) continue;   // same bookmark already there
+        const sig = bmSig(b, srcLocs);
+        const key = `B:${sig}`;
+        candidate(key, {
+          kind: 'bookmarks', label: b.Title || '(no title)',
+          sub: `${locLabel(srcLocs.get(b.PublicationLocationId))} · slot ${b.Slot + 1}`,
+          file: f, deletedOn: deletedOn(fi, 'bookmarks', sig),
+        });
+        if (excluded.has(key)) continue;
+        const pub = mapLoc(b.PublicationLocationId), loc = mapLoc(b.LocationId);
+        if (pub === null || loc === null) continue;
+        const used = new Set(q(out, 'SELECT Slot FROM Bookmark WHERE PublicationLocationId = ?', [pub]).map(r => r.Slot));
+        let slot = b.Slot;
+        if (used.has(slot)) {
+          slot = [...Array(10).keys()].find(s => !used.has(s));
+          if (slot === undefined) { res.bookmarkNoSlot++; continue; }
+          res.bookmarkMoved++;
+        }
+        const id = insertRow('Bookmark', { ...b, Slot: slot }, { LocationId: () => loc, PublicationLocationId: () => pub }, 'BookmarkId');
+        if (id !== null) res.added.bookmarks++;
+      }
+    }
 
-    // Bookmarks - by location
-    setProgress(30 + i*20);
-    totalNewBookmarks += 0; // complex, counted during merge
+    // ── Playlists: media (by FilePath), items (by content signature), maps, markers ──
+    const mediaMap = new Map(), piMap = new Map();
+    if (has(src, 'IndependentMedia') && has(out, 'IndependentMedia')) {
+      for (const m of q(src, 'SELECT * FROM IndependentMedia')) {
+        let id = q1(out, 'SELECT IndependentMediaId FROM IndependentMedia WHERE FilePath = ?', [m.FilePath]);
+        if (id === null) {
+          id = insertRow('IndependentMedia', m, {}, 'IndependentMediaId');
+          if (id !== null) res.added.media++;
+        }
+        if (id !== null) mediaMap.set(m.IndependentMediaId, id);
+      }
+    }
+    if (has(src, 'PlaylistItem') && has(out, 'PlaylistItem')) {
+      const sigsOf = (db, L) => {
+        const media = has(db, 'PlaylistItemIndependentMediaMap', 'IndependentMedia') ? groupBy(q(db,
+          'SELECT m.PlaylistItemId, i.FilePath FROM PlaylistItemIndependentMediaMap m JOIN IndependentMedia i USING (IndependentMediaId)'), 'PlaylistItemId') : new Map();
+        const locs = has(db, 'PlaylistItemLocationMap') ? groupBy(q(db, 'SELECT * FROM PlaylistItemLocationMap'), 'PlaylistItemId') : new Map();
+        return new Map(q(db, 'SELECT * FROM PlaylistItem').map(p => [p.PlaylistItemId, [
+          p.Label, p.ThumbnailFilePath, p.StartTrimOffsetTicks, p.EndTrimOffsetTicks,
+          (media.get(p.PlaylistItemId) || []).map(r => r.FilePath).sort().join(','),
+          (locs.get(p.PlaylistItemId) || []).map(r => locSig(L.get(r.LocationId))).sort().join(','),
+        ].join('#')]));
+      };
+      const outLocs = new Map(q(out, 'SELECT * FROM Location').map(l => [l.LocationId, l]));
+      const outBySig = new Map([...sigsOf(out, outLocs)].map(([id, s]) => [s, id]));
+      const srcSigs = sigsOf(src, srcLocs);
+      const grp = (t, k) => has(src, t) && has(out, t) ? groupBy(q(src, `SELECT * FROM "${t}"`), k) : new Map();
+      const locMaps = grp('PlaylistItemLocationMap', 'PlaylistItemId');
+      const mediaMaps = grp('PlaylistItemIndependentMediaMap', 'PlaylistItemId');
+      const markers = grp('PlaylistItemMarker', 'PlaylistItemId');
+      const verseMaps = grp('PlaylistItemMarkerBibleVerseMap', 'PlaylistItemMarkerId');
+      const paraMaps = grp('PlaylistItemMarkerParagraphMap', 'PlaylistItemMarkerId');
+      for (const p of q(src, 'SELECT * FROM PlaylistItem')) {
+        const sig = srcSigs.get(p.PlaylistItemId);
+        if (outBySig.has(sig)) { piMap.set(p.PlaylistItemId, outBySig.get(sig)); continue; }
+        const id = insertRow('PlaylistItem', p, {}, 'PlaylistItemId');
+        if (id === null) continue;
+        piMap.set(p.PlaylistItemId, id);
+        outBySig.set(sig, id);
+        res.added.playlistItems++;
+        for (const r of locMaps.get(p.PlaylistItemId) || [])
+          insertRow('PlaylistItemLocationMap', r, { PlaylistItemId: () => id, LocationId: mapLoc });
+        for (const r of mediaMaps.get(p.PlaylistItemId) || [])
+          insertRow('PlaylistItemIndependentMediaMap', r, { PlaylistItemId: () => id, IndependentMediaId: x => mediaMap.get(x) });
+        for (const mk of markers.get(p.PlaylistItemId) || []) {
+          const mid = insertRow('PlaylistItemMarker', mk, { PlaylistItemId: () => id }, 'PlaylistItemMarkerId');
+          if (mid === null) continue;
+          for (const r of verseMaps.get(mk.PlaylistItemMarkerId) || []) insertRow('PlaylistItemMarkerBibleVerseMap', r, { PlaylistItemMarkerId: () => mid });
+          for (const r of paraMaps.get(mk.PlaylistItemMarkerId) || []) insertRow('PlaylistItemMarkerParagraphMap', r, { PlaylistItemMarkerId: () => mid });
+        }
+      }
+    }
+
+    // ── TagMap: tags on notes, places (favourites) and playlist items ──
+    if (has(src, 'TagMap', 'Tag') && has(out, 'TagMap', 'Tag')) {
+      for (const tm of q(src, 'SELECT * FROM TagMap ORDER BY TagId, Position')) {
+        let col, target = null;
+        if (tm.NoteId !== null && tm.NoteId !== undefined) { col = 'NoteId'; target = noteMap.get(tm.NoteId) ?? null; }
+        else if (tm.LocationId !== null && tm.LocationId !== undefined) { col = 'LocationId'; target = mapLoc(tm.LocationId); }
+        else if (tm.PlaylistItemId !== null && tm.PlaylistItemId !== undefined) { col = 'PlaylistItemId'; target = piMap.get(tm.PlaylistItemId) ?? null; }
+        if (target === null) continue;
+        const tid = mapTag(tm.TagId);
+        if (tid === null) continue;
+        if (q1(out, `SELECT 1 FROM TagMap WHERE TagId = ? AND "${col}" = ?`, [tid, target])) continue;
+        const pos = (q1(out, 'SELECT MAX(Position) FROM TagMap WHERE TagId = ?', [tid]) ?? -1) + 1;
+        if (insertRow('TagMap', { TagId: tid, [col]: target, Position: pos }, {}, 'TagMapId') !== null) res.added.tagMaps++;
+      }
+    }
+
+    // ── InputField (filled-in fields in workbooks); the newer value wins ──
+    if (has(src, 'InputField') && has(out, 'InputField')) {
+      for (const inf of q(src, 'SELECT * FROM InputField')) {
+        const loc = mapLoc(inf.LocationId);
+        if (loc === null) continue;
+        if (q1(out, 'SELECT 1 FROM InputField WHERE LocationId = ? AND TextTag = ?', [loc, inf.TextTag])) continue;
+        if (insertRow('InputField', { ...inf, LocationId: loc }) !== null) res.added.inputFields++;
+      }
+    }
   }
 
-  setProgress(80);
-  await sleep(10);
-  log('Analysis complete.', 'ok');
+  if (tableExists(out, 'LastModified')) {
+    const old = q1(out, 'SELECT LastModified FROM LastModified LIMIT 1');
+    out.run('UPDATE LastModified SET LastModified = ?', [nowLike(old)]);
+  }
+  out.run('COMMIT');
+  res.integrity = q1(out, 'PRAGMA integrity_check');
+  res.fkProblems = q(out, 'PRAGMA foreign_key_check').length;
+  return res;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STEP 2 — analysis (trial merge)
+// ═══════════════════════════════════════════════════════════════════════════
+async function analyze() {
+  const files = activeFiles();
+  document.getElementById('step2').classList.remove('hidden');
+  document.getElementById('step3').classList.add('hidden');
+  document.getElementById('summaryArea').classList.add('hidden');
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('warnArea').innerHTML = '';
+  document.getElementById('mergeBtn').disabled = false;
+  setProgress(5);
+
+  log('Files sorted oldest → newest (the newest is the base):', 'info');
+  files.forEach((f, i) => log(`  [${i + 1}] ${f.file.name} — ${f.device}, ${f.date.toLocaleString()}${i === files.length - 1 ? '  ← base' : ''}`, 'info'));
+
+  const warnings = [];
+  const dupes = loadedFiles.filter(f => f?.status === 'ok').length - files.length;
+  if (dupes) warnings.push(`${dupes} file(s) were loaded twice and will be used only once.`);
+  for (const f of files.filter(f => f.dateSource !== 'manifest'))
+    warnings.push(`${escHtml(f.file.name)}: the date in manifest.json is missing or invalid — used the ${escHtml(f.dateSource)} instead. Check that the order above is right.`);
+  const schemas = [...new Set(files.map(f => f.schema).filter(v => v !== undefined))];
+  if (schemas.length > 1) {
+    const newest = files[files.length - 1].schema;
+    const higher = files.filter(f => f.schema > newest);
+    warnings.push(`The backups come from different JW Library versions (schema ${schemas.join(', ')}).` +
+      (higher.length ? ` <b>${higher.map(f => escHtml(f.file.name)).join(', ')}</b> is from a newer app version than the base — some of its data may not fit. Consider updating JW Library on all devices and making fresh backups.` : ' The result uses the format of the newest backup.'));
+  }
+  document.getElementById('warnArea').innerHTML = warnings.map(w => `<div class="alert alert-warn">${w}</div>`).join('');
+
+  log('Trial merge…', 'info');
+  let r;
+  try {
+    r = await runMerge(files, { progress: (i, f) => { setProgress(10 + Math.round(80 * i / (files.length - 1))); log(`  reading ${f.file.name}`); } });
+  } catch (e) {
+    console.error(e);
+    log('Analysis failed: ' + e.message, 'err');
+    return;
+  }
+  r.db.close();
   setProgress(100);
+  const byKind = k => r.candidates.filter(c => c.kind === k);
+  log(`Would add ${byKind('notes').length} notes, ${byKind('marks').length} highlights, ${byKind('bookmarks').length} bookmarks, ` +
+      `${r.added.tags} tags, ${r.added.playlistItems} playlist items.`, 'ok');
+  if (r.conflicts.length) log(`${r.conflicts.length} note(s) were edited differently on two devices — both versions will be kept.`, 'warn');
+  if (r.errors.length) log(`${r.errors.length} record(s) could not be copied (first: ${r.errors[0]}).`, 'warn');
 
-  analysisResult = { files, conflicts, totalNewNotes, totalNewMarks, totalNewTags };
+  analysisResult = { files };
+  const deleted = r.candidates.filter(c => c.deletedOn).length;
+  document.getElementById('summaryGrid').innerHTML = [
+    ['', files.length, 'files'],
+    ['new-items', '+' + byKind('notes').length, 'notes'],
+    ['new-items', '+' + byKind('marks').length, 'highlights'],
+    ['new-items', '+' + byKind('bookmarks').length, 'bookmarks'],
+    ['new-items', '+' + r.added.tags, 'tags'],
+    ['', r.conflicts.length, 'edited twice'],
+    ['', deleted, 'probably deleted'],
+  ].map(([cls, n, l]) => `<div class="summary-card ${cls}"><span class="num">${n}</span><span class="lbl">${l}</span></div>`).join('');
 
-  // Show summary
-  const sg = document.getElementById('summaryGrid');
-  sg.innerHTML = `
-    <div class="summary-card">
-      <span class="num">${files.length}</span>
-      <span class="lbl">files loaded</span>
-    </div>
-    <div class="summary-card new-items">
-      <span class="num">+${totalNewNotes}</span>
-      <span class="lbl">unique notes</span>
-    </div>
-    <div class="summary-card new-items">
-      <span class="num">+${totalNewMarks}</span>
-      <span class="lbl">unique highlights</span>
-    </div>
-    <div class="summary-card new-items">
-      <span class="num">+${totalNewTags}</span>
-      <span class="lbl">unique tags</span>
-    </div>
-    <div class="summary-card">
-      <span class="num">${conflicts.length}</span>
-      <span class="lbl">updated notes</span>
-    </div>`;
+  const tbody = document.querySelector('#conflictTable tbody');
+  tbody.innerHTML = r.conflicts.map(c => `<tr>
+      <td class="wrap">${escHtml(c.title)}</td>
+      <td class="wrap">${escHtml(c.kept)}</td>
+      <td class="wrap">${escHtml(c.other)}</td></tr>`).join('');
+  document.getElementById('conflictArea').classList.toggle('hidden', !r.conflicts.length);
 
-  if (conflicts.length > 0) {
-    const tbody = document.querySelector('#conflictTable tbody');
-    tbody.innerHTML = conflicts.map(c => `
-      <tr>
-        <td>${c.guid}</td>
-        <td>${escHtml(c.oldTitle)}</td>
-        <td>${escHtml(c.newTitle)}</td>
-        <td class="badge-new">newer kept</td>
-      </tr>`).join('');
-    document.getElementById('conflictArea').classList.remove('hidden');
-  }
-
+  renderPicks(r.candidates);
   document.getElementById('summaryArea').classList.remove('hidden');
+}
 
-  // Animate numbers counting up
-  document.querySelectorAll('.summary-card .num').forEach(el => {
-    const target = parseInt(el.textContent.replace('+','')) || 0;
-    const prefix = el.textContent.startsWith('+') ? '+' : '';
-    let start = 0;
-    const duration = 600;
-    const step = timestamp => {
-      if (!start) start = timestamp;
-      const progress = Math.min((timestamp - start) / duration, 1);
-      const ease = 1 - Math.pow(1 - progress, 3);
-      el.textContent = prefix + Math.round(ease * target);
-      if (progress < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
+const PICK_KINDS = [['notes', 'Notes'], ['marks', 'Highlights'], ['bookmarks', 'Bookmarks']];
+
+function renderPicks(cands) {
+  document.getElementById('pickFind').value = '';
+  document.getElementById('pickArea').classList.toggle('hidden', !cands.length);
+  document.getElementById('pickGroups').innerHTML = PICK_KINDS.map(([kind, title]) => {
+    const list = cands.filter(c => c.kind === kind);
+    if (!list.length) return '';
+    const anyDel = list.some(c => c.deletedOn);
+    return `<details class="pick-group" data-kind="${kind}" ${list.length <= 30 || anyDel ? 'open' : ''}>
+      <summary><b>${title}</b> <span class="small muted" data-count></span></summary>
+      <div class="pick-tools">
+        <button class="btn btn-secondary btn-sm" onclick="setPicks('${kind}', true)">Check all</button>
+        <button class="btn btn-secondary btn-sm" onclick="setPicks('${kind}', false)">Uncheck all</button>
+        ${anyDel ? `<button class="btn btn-secondary btn-sm" onclick="setPicks('${kind}', false, true)">Uncheck probably deleted</button>` : ''}
+      </div>
+      <div class="pick-list">${list.map(c => `
+        <label class="pick-row">
+          <input type="checkbox" data-key="${escHtml(c.key)}" ${c.deletedOn ? 'data-deleted="1"' : 'checked'} onchange="updatePickCounts()">
+          <div>
+            <div class="pick-main">${c.kind === 'marks' ? dot(c.color) + ' ' : ''}${escHtml(c.label)}</div>
+            <div class="pick-sub">${escHtml(c.sub)} · from ${escHtml(c.file.file.name)}
+              ${c.deletedOn ? `<br><span class="warn-text">probably deleted — missing from the ${escHtml(c.deletedOn.date.toLocaleDateString())} backup of ${escHtml(c.deletedOn.device)}</span>` : ''}</div>
+          </div>
+        </label>`).join('')}</div>
+    </details>`;
+  }).join('');
+  updatePickCounts();
+}
+
+function setPicks(kind, on, onlyDeleted = false) {
+  document.querySelectorAll(`.pick-group[data-kind="${kind}"] .pick-row`).forEach(row => {
+    if (row.style.display === 'none') return;   // respect the search filter
+    const box = row.querySelector('input');
+    if (!onlyDeleted || box.dataset.deleted) box.checked = on;
+  });
+  updatePickCounts();
+}
+
+function updatePickCounts() {
+  document.querySelectorAll('.pick-group').forEach(g => {
+    const boxes = g.querySelectorAll('input[data-key]');
+    const on = [...boxes].filter(b => b.checked).length;
+    g.querySelector('[data-count]').textContent = `— ${on} of ${boxes.length} will be added`;
   });
 }
 
+function filterPicks() {
+  const term = document.getElementById('pickFind').value.trim().toLowerCase();
+  document.querySelectorAll('.pick-row').forEach(row => {
+    row.style.display = !term || row.textContent.toLowerCase().includes(term) ? '' : 'none';
+  });
+  if (term) document.querySelectorAll('.pick-group').forEach(g => g.open = true);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STEP 3 — real merge
+// ═══════════════════════════════════════════════════════════════════════════
 async function doMerge() {
-  document.getElementById('mergeBtn').disabled = true;
+  if (!analysisResult) return;
+  const btn = document.getElementById('mergeBtn');
+  btn.disabled = true;
   const { files } = analysisResult;
-  log('---', '');
-  log('Starting merge...', 'info');
+  const excluded = new Set([...document.querySelectorAll('#pickGroups input[data-key]:not(:checked)')].map(b => b.dataset.key));
+  log('---');
+  log(`Merging${excluded.size ? ` (leaving out ${excluded.size} item(s) you unchecked)` : ''}…`, 'info');
   setProgress(0);
-
-  // Use newest as base, copy it
-  const newestFile = files[files.length - 1];
-  const mergedDbBytes = newestFile.db.export();
-  const merge = new SQL.Database(mergedDbBytes);
-
-  function rows(db, q, p=[]) {
-    try {
-      const res = db.exec(q);
-      if (!res.length) return [];
-      return res[0].values.map(v => {
-        const obj = {};
-        res[0].columns.forEach((c,i) => obj[c] = v[i]);
-        return obj;
-      });
-    } catch(e) { return []; }
-  }
-  function scalar(db, q, p=[]) {
-    try { const r = db.exec(q, p); return r.length ? r[0].values[0][0] : null; } catch(e) { return null; }
-  }
-  function run(db, q, p=[]) {
-    try { db.run(q, p); return true; } catch(e) { log('  SQL error: '+e.message, 'err'); return false; }
+  let r;
+  try {
+    r = await runMerge(files, { excluded, progress: (i, f) => { setProgress(Math.round(90 * i / (files.length - 1))); log(`  from ${f.file.name}`); } });
+  } catch (e) {
+    console.error(e);
+    log('Merge failed: ' + e.message, 'err');
+    btn.disabled = false;
+    return;
   }
 
-  // Get column names of a table from a db
-  function getColumns(db, table) {
-    const res = db.exec(`PRAGMA table_info("${table}")`);
-    if (!res.length) return [];
-    return res[0].values.map(v => v[1]); // column name is index 1
-  }
-
-  // Build an INSERT statement dynamically based on actual columns in target db.
-  // Remaps known ID/foreign-key columns using provided maps.
-  // IMPORTANT: if a foreign key is not found in its map, we use NULL rather than
-  // falling back to the raw source ID — a raw source ID from a different device
-  // would point to a completely wrong location in the target database.
-  function insertRow(targetDb, table, row, idMaps={}, newPk=null, pkCol=null) {
-    const cols = getColumns(targetDb, table);
-    const vals = cols.map(col => {
-      if (pkCol && col === pkCol) return newPk;
-      if (idMaps[col] !== undefined) {
-        const val = row[col];
-        if (val === null || val === undefined) return null;
-        const mapped = idMaps[col][val];
-        if (mapped === undefined) {
-          // Foreign key not found in map — use null instead of raw source value.
-          // Using raw value would silently point to the wrong record on a different device.
-          return null;
-        }
-        return mapped;
-      }
-      // Column exists in target but not in source row -> use null
-      return (row[col] !== undefined) ? row[col] : null;
-    });
-    const placeholders = cols.map(() => '?').join(',');
-    return run(targetDb, `INSERT INTO "${table}" (${cols.map(c=>`"${c}"`).join(',')}) VALUES (${placeholders})`, vals);
-  }
-
-  function locKey(r) {
-    return [r.BookNumber,r.ChapterNumber,r.DocumentId,r.Track,r.IssueTagNumber,r.KeySymbol,r.MepsLanguage,r.Type].join('|');
-  }
-
-  let addedNotes=0, addedMarks=0, addedBRs=0, addedTags=0, addedBMs=0, addedTMs=0, addedIFs=0, addedPIs=0;
-
-  for (let fi = 0; fi < files.length - 1; fi++) {
-    const old = files[fi].db;
-    log(`Merging from: ${files[fi].file.name}`, 'info');
-    setProgress(Math.round((fi / (files.length-1)) * 90));
-    await sleep(5);
-
-    // -- Locations --
-    // Build a complete map of every source LocationId -> target LocationId.
-    // We match by the logical content of the location (publication + chapter + language etc.),
-    // NOT by the numeric ID, because different devices assign IDs independently.
-    // Every source LocationId MUST appear in oldLocMap — any ID left out would cause
-    // insertRow to fall back to null rather than the raw (wrong-device) ID.
-    const newLocs = {};
-    rows(merge, 'SELECT * FROM Location').forEach(r => { newLocs[locKey(r)] = r.LocationId; });
-    const oldLocMap = {};
-    let maxLoc = scalar(merge, 'SELECT MAX(LocationId) FROM Location') || 0;
-    for (const loc of rows(old, 'SELECT * FROM Location')) {
-      const k = locKey(loc);
-      if (newLocs[k] !== undefined) {
-        // Already exists in target — remap source ID to existing target ID
-        oldLocMap[loc.LocationId] = newLocs[k];
-      } else {
-        // New location not in target — insert it and record the new ID
-        maxLoc++;
-        oldLocMap[loc.LocationId] = maxLoc;
-        insertRow(merge, 'Location', loc, {}, maxLoc, 'LocationId');
-        newLocs[k] = maxLoc;
-      }
-    }
-    // Verify: every source LocationId must be mapped
-    const unmappedLocs = rows(old, 'SELECT LocationId FROM Location')
-      .filter(r => oldLocMap[r.LocationId] === undefined);
-    if (unmappedLocs.length > 0) {
-      log(`  ⚠ ${unmappedLocs.length} locations could not be mapped — related notes/highlights skipped`, 'warn');
-    }
-
-    // -- Tags --
-    const newTagNames = {};
-    rows(merge, 'SELECT * FROM Tag').forEach(r => { newTagNames[r.Name] = r.TagId; });
-    const tagMap = {};
-    let maxTag = scalar(merge, 'SELECT MAX(TagId) FROM Tag') || 0;
-    for (const t of rows(old, 'SELECT * FROM Tag')) {
-      if (newTagNames[t.Name] !== undefined) {
-        tagMap[t.TagId] = newTagNames[t.Name];
-      } else {
-        maxTag++;
-        tagMap[t.TagId] = maxTag;
-        insertRow(merge, 'Tag', t, {}, maxTag, 'TagId');
-        newTagNames[t.Name] = maxTag;
-        addedTags++;
-      }
-    }
-
-    // -- UserMarks --
-    // Build complete source->target map for all UserMark IDs (by GUID).
-    // New marks are inserted; existing ones are just remapped.
-    // Both categories must be in umMap before BlockRange/Note use it.
-    const newMarkGuids = {};
-    rows(merge, 'SELECT UserMarkId, UserMarkGuid FROM UserMark').forEach(r => { newMarkGuids[r.UserMarkGuid] = r.UserMarkId; });
-    const umMap = {};
-    let maxUm = scalar(merge, 'SELECT MAX(UserMarkId) FROM UserMark') || 0;
-    const newMarkIdSet = new Set();
-    for (const m of rows(old, 'SELECT * FROM UserMark')) {
-      if (newMarkGuids[m.UserMarkGuid] !== undefined) {
-        // Already exists in target — just remap the ID
-        umMap[m.UserMarkId] = newMarkGuids[m.UserMarkGuid];
-      } else {
-        // New mark — insert and record
-        maxUm++;
-        umMap[m.UserMarkId] = maxUm;
-        insertRow(merge, 'UserMark', m, { LocationId: oldLocMap }, maxUm, 'UserMarkId');
-        newMarkGuids[m.UserMarkGuid] = maxUm;
-        newMarkIdSet.add(m.UserMarkId);
-        addedMarks++;
-      }
-    }
-
-    // -- BlockRanges --
-    // Only insert BlockRanges for marks that are new (existing marks already have their ranges).
-    let maxBr = scalar(merge, 'SELECT MAX(BlockRangeId) FROM BlockRange') || 0;
-    for (const br of rows(old, 'SELECT * FROM BlockRange')) {
-      if (newMarkIdSet.has(br.UserMarkId)) {
-        maxBr++;
-        insertRow(merge, 'BlockRange', br, { UserMarkId: umMap }, maxBr, 'BlockRangeId');
-        addedBRs++;
-      }
-    }
-
-    // -- Notes --
-    // Map every source NoteId -> target NoteId (by GUID).
-    // insertRow will use oldLocMap and umMap for foreign keys — both are complete at this point,
-    // so no note will be anchored to a wrong-device LocationId.
-    const newNoteGuids = {};
-    rows(merge, 'SELECT NoteId, Guid FROM Note').forEach(r => { newNoteGuids[r.Guid] = r.NoteId; });
-    const noteMap = {};
-    let maxNote = scalar(merge, 'SELECT MAX(NoteId) FROM Note') || 0;
-    const newNoteIdSet = new Set();
-    for (const n of rows(old, 'SELECT * FROM Note')) {
-      if (newNoteGuids[n.Guid] !== undefined) {
-        noteMap[n.NoteId] = newNoteGuids[n.Guid];
-      } else {
-        maxNote++;
-        noteMap[n.NoteId] = maxNote;
-        insertRow(merge, 'Note', n, { LocationId: oldLocMap, UserMarkId: umMap }, maxNote, 'NoteId');
-        newNoteGuids[n.Guid] = maxNote;
-        newNoteIdSet.add(n.NoteId);
-        addedNotes++;
-      }
-    }
-
-    // -- Bookmarks --
-    // Build a set of existing (slot) keys to avoid all unique constraint violations
-    const existingBmSlots = new Set(
-      rows(merge, 'SELECT Slot FROM Bookmark').map(r => r.Slot)
-    );
-    let maxBm = scalar(merge, 'SELECT MAX(BookmarkId) FROM Bookmark') || 0;
-    for (const bm of rows(old, 'SELECT * FROM Bookmark')) {
-      // Slot must be globally unique across all bookmarks
-      if (existingBmSlots.has(bm.Slot)) continue;
-      maxBm++;
-      const ok = insertRow(merge, 'Bookmark', bm,
-        { LocationId: oldLocMap, PublicationLocationId: oldLocMap },
-        maxBm, 'BookmarkId');
-      if (ok) {
-        existingBmSlots.add(bm.Slot);
-        addedBMs++;
-      }
-    }
-
-    // -- IndependentMedia --
-    // FilePath is a UUID — globally unique key across devices.
-    // Must be merged BEFORE PlaylistItem because PlaylistItem.ThumbnailFilePath references it.
-    const newMediaPaths = {};
-    rows(merge, 'SELECT IndependentMediaId, FilePath FROM IndependentMedia').forEach(r => {
-      newMediaPaths[r.FilePath] = r.IndependentMediaId;
-    });
-    const mediaIdMap = {}; // old IndependentMediaId -> merged IndependentMediaId
-    let maxMedia = scalar(merge, 'SELECT MAX(IndependentMediaId) FROM IndependentMedia') || 0;
-    for (const m of rows(old, 'SELECT * FROM IndependentMedia')) {
-      if (newMediaPaths[m.FilePath] !== undefined) {
-        mediaIdMap[m.IndependentMediaId] = newMediaPaths[m.FilePath];
-      } else {
-        maxMedia++;
-        mediaIdMap[m.IndependentMediaId] = maxMedia;
-        insertRow(merge, 'IndependentMedia', m, {}, maxMedia, 'IndependentMediaId');
-        newMediaPaths[m.FilePath] = maxMedia;
-      }
-    }
-
-    // -- PlaylistItem --
-    // No GUID exists — use (Label + ThumbnailFilePath) as unique key.
-    // ThumbnailFilePath is a UUID from IndependentMedia.FilePath, so it's device-independent.
-    const newPlaylistItems = {};
-    rows(merge, 'SELECT PlaylistItemId, Label, ThumbnailFilePath FROM PlaylistItem').forEach(r => {
-      newPlaylistItems[`${r.Label}|${r.ThumbnailFilePath}`] = r.PlaylistItemId;
-    });
-    const playlistItemIdMap = {}; // old PlaylistItemId -> merged PlaylistItemId
-    let maxPi = scalar(merge, 'SELECT MAX(PlaylistItemId) FROM PlaylistItem') || 0;
-    let addedPIs = 0;
-    for (const pi of rows(old, 'SELECT * FROM PlaylistItem')) {
-      const key = `${pi.Label}|${pi.ThumbnailFilePath}`;
-      if (newPlaylistItems[key] !== undefined) {
-        playlistItemIdMap[pi.PlaylistItemId] = newPlaylistItems[key];
-      } else {
-        maxPi++;
-        playlistItemIdMap[pi.PlaylistItemId] = maxPi;
-        insertRow(merge, 'PlaylistItem', pi, {}, maxPi, 'PlaylistItemId');
-        newPlaylistItems[key] = maxPi;
-        addedPIs++;
-      }
-    }
-
-    // -- PlaylistItemLocationMap --
-    const existingPiLoc = new Set(
-      rows(merge, 'SELECT PlaylistItemId, LocationId FROM PlaylistItemLocationMap')
-        .map(r => `${r.PlaylistItemId}|${r.LocationId}`)
-    );
-    for (const lm of rows(old, 'SELECT * FROM PlaylistItemLocationMap')) {
-      const newPid = playlistItemIdMap[lm.PlaylistItemId];
-      const newLoc = oldLocMap[lm.LocationId];
-      if (newPid === undefined || newLoc === undefined) continue;
-      const key = `${newPid}|${newLoc}`;
-      if (!existingPiLoc.has(key)) {
-        run(merge, `INSERT INTO PlaylistItemLocationMap VALUES (?,?,?,?)`,
-          [newPid, newLoc, lm.MajorMultimediaType, lm.BaseDurationTicks]);
-        existingPiLoc.add(key);
-      }
-    }
-
-    // -- PlaylistItemIndependentMediaMap --
-    const existingPiMedia = new Set(
-      rows(merge, 'SELECT PlaylistItemId, IndependentMediaId FROM PlaylistItemIndependentMediaMap')
-        .map(r => `${r.PlaylistItemId}|${r.IndependentMediaId}`)
-    );
-    for (const imm of rows(old, 'SELECT * FROM PlaylistItemIndependentMediaMap')) {
-      const newPid = playlistItemIdMap[imm.PlaylistItemId];
-      const newMid = mediaIdMap[imm.IndependentMediaId];
-      if (newPid === undefined || newMid === undefined) continue;
-      const key = `${newPid}|${newMid}`;
-      if (!existingPiMedia.has(key)) {
-        run(merge, `INSERT INTO PlaylistItemIndependentMediaMap VALUES (?,?,?)`,
-          [newPid, newMid, imm.DurationTicks]);
-        existingPiMedia.add(key);
-      }
-    }
-
-    // -- TagMaps --
-    // PlaylistItem TagMaps use remapped playlistItemIdMap — raw source IDs are meaningless in target.
-    const byNote = new Set(rows(merge,'SELECT TagId,NoteId FROM TagMap WHERE NoteId IS NOT NULL').map(r=>`${r.TagId}|${r.NoteId}`));
-    const byLoc  = new Set(rows(merge,'SELECT TagId,LocationId FROM TagMap WHERE LocationId IS NOT NULL').map(r=>`${r.TagId}|${r.LocationId}`));
-    const byPl   = new Set(rows(merge,'SELECT TagId,PlaylistItemId FROM TagMap WHERE PlaylistItemId IS NOT NULL').map(r=>`${r.TagId}|${r.PlaylistItemId}`));
-    const maxPos = {};
-    rows(merge,'SELECT TagId,MAX(Position) as mp FROM TagMap GROUP BY TagId').forEach(r => { maxPos[r.TagId] = r.mp; });
-    let maxTm = scalar(merge,'SELECT MAX(TagMapId) FROM TagMap') || 0;
-    for (const tm of rows(old,'SELECT * FROM TagMap')) {
-      const tid = tagMap[tm.TagId] ?? tm.TagId;
-      const loc = tm.LocationId ? (oldLocMap[tm.LocationId] ?? null) : null;
-      const nid = tm.NoteId ? (noteMap[tm.NoteId] ?? null) : null;
-      const pid = tm.PlaylistItemId ? (playlistItemIdMap[tm.PlaylistItemId] ?? null) : null;
-
-      // TagMap CHECK constraint requires exactly one of (NoteId, LocationId, PlaylistItemId) to be set.
-      // If remapping lost the reference (mapped to null), skip the row entirely.
-      const setCount = (nid !== null ? 1 : 0) + (loc !== null ? 1 : 0) + (pid !== null ? 1 : 0);
-      if (setCount !== 1) continue;
-
-      let skip = false;
-      if (nid !== null && byNote.has(`${tid}|${nid}`)) skip = true;
-      else if (loc !== null && byLoc.has(`${tid}|${loc}`)) skip = true;
-      else if (pid !== null && byPl.has(`${tid}|${pid}`)) skip = true;
-      if (!skip) {
-        maxTm++;
-        const pos = (maxPos[tid] ?? -1) + 1;
-        maxPos[tid] = pos;
-        run(merge, `INSERT INTO TagMap VALUES (?,?,?,?,?,?)`, [maxTm, pid, loc, nid, tid, pos]);
-        if (nid !== null) byNote.add(`${tid}|${nid}`);
-        else if (loc !== null) byLoc.add(`${tid}|${loc}`);
-        else if (pid !== null) byPl.add(`${tid}|${pid}`);
-        addedTMs++;
-      }
-    }
-
-    // -- InputFields --
-    const ifKeys = new Set(rows(merge,'SELECT LocationId,TextTag FROM InputField').map(r=>`${r.LocationId}|${r.TextTag}`));
-    for (const inf of rows(old,'SELECT * FROM InputField')) {
-      const loc = oldLocMap[inf.LocationId] ?? null;
-      if (loc === null) continue;
-      if (!ifKeys.has(`${loc}|${inf.TextTag}`)) {
-        run(merge, `INSERT INTO InputField VALUES (?,?,?)`, [loc, inf.TextTag, inf.Value]);
-        ifKeys.add(`${loc}|${inf.TextTag}`);
-        addedIFs++;
-      }
-    }
-
-    log(`  + ${addedNotes} notes, ${addedMarks} highlights, ${addedBMs} bookmarks, ${addedTags} tags, ${addedPIs} playlist items`, 'ok');
-  }
-
-  // Build new manifest + zip
   setProgress(95);
-  log('Packaging output file...', 'info');
-  await sleep(5);
+  log('Checking the result and packaging…', 'info');
+  const problems = [];
+  if (r.integrity !== 'ok') problems.push(`Database integrity check: ${r.integrity}`);
+  if (r.fkProblems) problems.push(`${r.fkProblems} record(s) point to data that doesn’t exist.`);
+  if (r.errors.length) problems.push(`${r.errors.length} record(s) could not be copied (first: ${r.errors[0]}).`);
+  if (r.bookmarkNoSlot) problems.push(`${r.bookmarkNoSlot} bookmark(s) skipped — all 10 slots of their publication were taken.`);
 
-  const mergedBytes = merge.export();
-  const hashHex = await sha256hex(mergedBytes);
-  const baseManifest = JSON.parse(await newestFile.zip.file('manifest.json').async('string'));
-  baseManifest.userDataBackup.hash = hashHex;
+  const dbBytes = r.db.export();
+  r.db.close();
+  const base = files[files.length - 1];
+  const manifest = JSON.parse(JSON.stringify(base.manifest));
+  manifest.userDataBackup = manifest.userDataBackup || {};
+  manifest.userDataBackup.hash = await sha256hex(dbBytes);
+  manifest.userDataBackup.lastModifiedDate = nowLike(manifest.userDataBackup.lastModifiedDate);
 
-  const outZip = new JSZip();
-  outZip.file('manifest.json', JSON.stringify(baseManifest));
-  outZip.file('userData.db', mergedBytes);
-  // Copy all non-db, non-manifest files from newest backup
-  const newestZip = newestFile.zip;
-  for (const [name, zobj] of Object.entries(newestZip.files)) {
-    if (name === 'userData.db' || name === 'manifest.json' || zobj.dir) continue;
-    const buf = await zobj.async('arraybuffer');
-    outZip.file(name, buf);
+  const zip = new JSZip();
+  zip.file('manifest.json', JSON.stringify(manifest));
+  zip.file('userData.db', dbBytes);
+  // Media files (playlist images/videos) from every backup; the newest copy wins.
+  for (const f of [...files].reverse()) {
+    for (const [name, z] of Object.entries(f.zip.files)) {
+      if (z.dir || name === 'userData.db' || name === 'manifest.json' || zip.file(name)) continue;
+      zip.file(name, await z.async('uint8array'));
+    }
   }
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  if (mergeUrl) URL.revokeObjectURL(mergeUrl);
+  mergeUrl = URL.createObjectURL(blob);
+  const fname = `${new Date().toISOString().slice(0, 10)}_MERGED.jwlibrary`;
+  const link = document.getElementById('downloadLink');
+  link.href = mergeUrl;
+  link.download = fname;
 
-  const blob = await outZip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-  const url = URL.createObjectURL(blob);
-  const dateStr = new Date().toISOString().slice(0,10);
-  const fname = `${dateStr}_MERGED.jwlibrary`;
-
-  document.getElementById('downloadLink').href = url;
-  document.getElementById('downloadLink').download = fname;
-  document.getElementById('doneMsg').textContent =
-    `Merged ${files.length} backups. Added ${addedNotes} notes, ${addedMarks} highlights, ${addedBMs} bookmarks, ${addedTags} tags, ${addedPIs} playlist items from older backups. ${analysisResult.conflicts.length} notes had conflicts — newer version was kept.`;
+  const a = r.added;
+  const parts = [`${a.notes} notes`, `${a.marks} highlights`, `${a.bookmarks} bookmarks`, `${a.tags} tags`];
+  if (a.playlistItems) parts.push(`${a.playlistItems} playlist items`);
+  if (a.inputFields) parts.push(`${a.inputFields} workbook fields`);
+  const msg = document.getElementById('doneMsg');
+  msg.className = 'alert ' + (problems.length ? 'alert-warn' : 'alert-info');
+  msg.innerHTML = `Merged ${files.length} backups into <b>${escHtml(fname)}</b>. Added from older backups: ${parts.join(', ')}.` +
+    (r.conflicts.length ? `<br>${r.conflicts.length} note(s) were edited on two devices — the latest text is kept, the other as “[Older version] …”.` : '') +
+    (r.bookmarkMoved ? `<br>${r.bookmarkMoved} bookmark(s) moved to a free slot because theirs was taken.` : '') +
+    (excluded.size ? `<br>${excluded.size} item(s) left out as you chose.` : '') +
+    (problems.length ? `<br><br><b>Please check the result carefully before restoring it:</b><br>${problems.map(escHtml).join('<br>')}` : '');
 
   setProgress(100);
-  log('Done!', 'ok');
-  // Mark step nums as done
-  document.querySelectorAll('.step-num').forEach(el => el.classList.add('done'));
+  log(problems.length ? 'Done, with warnings.' : 'Done!', problems.length ? 'warn' : 'ok');
+  document.querySelectorAll('#viewMerge .step-num').forEach(el => el.classList.add('done'));
   document.getElementById('step3').classList.remove('hidden');
   document.getElementById('step3').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  btn.disabled = false;
 }
 
 async function sha256hex(bytes) {
@@ -1514,31 +1636,17 @@ function escHtml(s) {
 }
 
 function reset() {
+  loadedFiles.forEach(f => f?.db?.close());
   loadedFiles = [];
-  analysisResult = null;
   slotCount = 2;
-  document.getElementById('fileGrid').innerHTML = `
-    <div class="drop-zone" id="drop1">
-      <input type="file" accept=".jwlibrary" id="fileInput1" onchange="loadFile(0, this)">
-      <span class="drop-icon">&#128194;</span>
-      <div class="drop-label">Older backup</div>
-      <div class="drop-hint">drop or click to browse</div>
-    </div>
-    <div class="drop-zone" id="drop2">
-      <input type="file" accept=".jwlibrary" id="fileInput2" onchange="loadFile(1, this)">
-      <span class="drop-icon">&#128194;</span>
-      <div class="drop-label">Newer backup</div>
-      <div class="drop-hint">drop or click to browse</div>
-    </div>`;
-  document.getElementById('analyzeBtn').disabled = true;
-  document.getElementById('addMoreBtn').disabled = false;
-  document.getElementById('step2').classList.add('hidden');
-  document.getElementById('step3').classList.add('hidden');
+  invalidateAnalysis();
   document.getElementById('logBox').innerHTML = '';
-  document.getElementById('summaryArea').classList.add('hidden');
-  document.getElementById('conflictArea').classList.add('hidden');
-  document.getElementById('mergeBtn').disabled = false;
+  document.getElementById('warnArea').innerHTML = '';
+  document.querySelectorAll('#viewMerge .step-num').forEach(el => el.classList.remove('done'));
   setProgress(0);
+  renderGrid();
+  checkAnalyzeReady();
+  document.getElementById('step1').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2403,20 +2511,27 @@ window.addEventListener('beforeunload', e => {
   if (ed?.dirty) { e.preventDefault(); e.returnValue = ''; }
 });
 
-// Drag and drop support
-document.addEventListener('dragover', e => e.preventDefault());
+// Drag and drop: a file dropped on a slot goes into that slot; several files fill the free slots.
+const clearDragOver = () => document.querySelectorAll('.drop-zone.drag-over').forEach(el => el.classList.remove('drag-over'));
+document.addEventListener('dragover', e => {
+  e.preventDefault();
+  const zone = e.target.closest?.('.drop-zone');
+  document.querySelectorAll('.drop-zone.drag-over').forEach(el => el !== zone && el.classList.remove('drag-over'));
+  zone?.classList.add('drag-over');
+});
+document.addEventListener('dragleave', e => { if (!e.relatedTarget?.closest?.('.drop-zone')) clearDragOver(); });
 document.addEventListener('drop', e => {
   e.preventDefault();
-  const files = [...e.dataTransfer.files].filter(f => f.name.endsWith('.jwlibrary'));
-  if (currentView === 'edit') { if (files[0]) edLoad(files[0]); return; }
-  files.forEach((file, i) => {
-    const idx = i < slotCount ? i : null;
-    if (idx !== null) {
-      const fake = { files: [file] };
-      loadFile(idx, fake);
-    }
-  });
+  clearDragOver();
+  const files = [...e.dataTransfer.files];
+  if (!files.length) return;
+  if (currentView === 'edit') { edLoad(files[0]); return; }
+  const zone = e.target.closest?.('.drop-zone[data-slot]');
+  if (zone && files.length === 1) loadFile(Number(zone.dataset.slot), files[0]);
+  else addFilesToFreeSlots(files);
 });
+
+renderGrid();
 </script>
 </body>
 </html>
