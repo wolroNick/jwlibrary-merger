@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JW Library Merger</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f4f5;
+    --surface: #ffffff;
+    --surface2: #f9f9fa;
+    --border: #e4e4e7;
+    --border2: #d1d1d6;
+    --text: #09090b;
+    --text2: #52525b;
+    --text3: #a1a1aa;
+    --accent: #18794e;
+    --accent-light: #f0fdf4;
+    --accent-mid: #4ade80;
+    --danger: #dc2626;
+    --danger-light: #fef2f2;
+    --warn: #d97706;
+    --warn-light: #fffbeb;
+    --success: #16a34a;
+    --success-light: #f0fdf4;
+    --radius: 12px;
+    --radius-lg: 18px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 8px 24px rgba(0,0,0,0.04);
+    --shadow-lg: 0 4px 12px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06);
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #09090b;
+      --surface: #18181b;
+      --surface2: #1c1c1f;
+      --border: #27272a;
+      --border2: #3f3f46;
+      --text: #fafafa;
+      --text2: #a1a1aa;
+      --text3: #52525b;
+      --accent: #4ade80;
+      --accent-light: #052e16;
+      --accent-mid: #16a34a;
+      --danger: #f87171;
+      --danger-light: #1c0a0a;
+      --warn: #fbbf24;
+      --warn-light: #1c1200;
+      --success: #4ade80;
+      --success-light: #052e16;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+      --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.3);
+      --shadow-lg: 0 4px 12px rgba(0,0,0,0.5), 0 20px 40px rgba(0,0,0,0.4);
+    }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  @keyframes pulse-border {
+    0%, 100% { border-color: var(--accent); box-shadow: 0 0 0 0 rgba(74,222,128,0); }
+    50%       { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(74,222,128,0.12); }
+  }
+  @keyframes countUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes shimmer {
+    from { background-position: -200% 0; }
+    to   { background-position: 200% 0; }
+  }
+  @keyframes checkPop {
+    0%   { transform: scale(0) rotate(-15deg); opacity: 0; }
+    60%  { transform: scale(1.2) rotate(3deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(12px);
+    background: rgba(255,255,255,0.85);
+  }
+  @media (prefers-color-scheme: dark) {
+    header { background: rgba(24,24,27,0.85); }
+  }
+  .header-icon {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(24,121,78,0.3);
+  }
+  header h1 {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  header span {
+    font-size: 0.75rem;
+    color: var(--text3);
+    font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.75rem;
+    box-shadow: var(--shadow);
+    animation: fadeUp 0.4s var(--ease) both;
+    transition: box-shadow 0.2s var(--ease), border-color 0.2s;
+  }
+  .step:hover { box-shadow: var(--shadow-lg); }
+  .step:nth-child(1) { animation-delay: 0ms; }
+  .step:nth-child(2) { animation-delay: 60ms; }
+  .step:nth-child(3) { animation-delay: 120ms; }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    margin-bottom: 1.5rem;
+  }
+  .step-num {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    border: 1.5px solid var(--accent-mid);
+    transition: transform 0.2s var(--ease), background 0.2s;
+  }
+  .step-num.done {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    animation: checkPop 0.4s var(--ease) both;
+  }
+  .step-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.015em;
+  }
+  .step-sub {
+    font-size: 0.75rem;
+    color: var(--text3);
+    margin-top: 0.2rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  /* Drop zones */
+  .file-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; }
+  @media (max-width: 560px) { .file-grid { grid-template-columns: 1fr; } }
+
+  .drop-zone {
+    border: 1.5px dashed var(--border2);
+    border-radius: var(--radius);
+    padding: 2rem 1.25rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s var(--ease), background 0.2s var(--ease),
+                transform 0.15s var(--ease), box-shadow 0.2s var(--ease);
+    background: var(--surface2);
+    position: relative;
+    animation: scaleIn 0.3s var(--ease) both;
+  }
+  .drop-zone:hover {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(24,121,78,0.1);
+  }
+  .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    transform: scale(1.02);
+    animation: pulse-border 1.2s infinite;
+  }
+  .drop-zone.loaded {
+    border-style: solid;
+    border-color: var(--accent);
+    background: var(--accent-light);
+    animation: scaleIn 0.25s var(--ease) both;
+  }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-icon {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+    display: block;
+    color: var(--text3);
+    transition: transform 0.2s var(--ease), color 0.2s;
+  }
+  .drop-zone:hover .drop-icon { transform: translateY(-3px); color: var(--accent); }
+  .drop-label { font-size: 0.85rem; font-weight: 500; color: var(--text2); }
+  .drop-hint {
+    font-size: 0.7rem;
+    color: var(--text3);
+    margin-top: 0.3rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  .file-name {
+    font-size: 0.8rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text);
+    word-break: break-all;
+    margin-bottom: 0.3rem;
+    font-weight: 500;
+  }
+  .file-date { font-size: 0.7rem; color: var(--text3); font-family: monospace; }
+  .file-stats { margin-top: 0.6rem; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .stat-pill {
+    font-size: 0.67rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    padding: 2px 7px;
+    border-radius: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    animation: fadeIn 0.3s var(--ease) both;
+  }
+  .remove-btn {
+    float: right;
+    background: none;
+    border: none;
+    color: var(--text3);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 2px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s, transform 0.15s;
+  }
+  .remove-btn:hover {
+    color: var(--danger);
+    background: var(--danger-light);
+    transform: scale(1.15);
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.6rem 1.25rem;
+    border-radius: var(--radius);
+    border: 1.5px solid;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease),
+                background 0.15s, opacity 0.15s;
+    text-decoration: none;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0);
+    transition: background 0.15s;
+  }
+  .btn:active { transform: scale(0.97) !important; }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(24,121,78,0.3), 0 4px 12px rgba(24,121,78,0.15);
+  }
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(24,121,78,0.4), 0 8px 20px rgba(24,121,78,0.2);
+  }
+  .btn-primary:hover::after { background: rgba(255,255,255,0.08); }
+  .btn-primary:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none;
+  }
+
+  .btn-secondary {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text2);
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-secondary:hover {
+    background: var(--surface2);
+    border-color: var(--border2);
+    color: var(--text);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+
+  .btn-download {
+    background: var(--success-light);
+    border-color: var(--success);
+    color: var(--success);
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 0.7rem 1.6rem;
+    box-shadow: 0 2px 8px rgba(22,163,74,0.2);
+  }
+  .btn-download:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(22,163,74,0.3);
+    background: var(--success);
+    color: #fff;
+  }
+
+  /* Loading spinner for file cards */
+  .loading-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    color: var(--text3);
+    font-size: 0.8rem;
+  }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  /* Log box */
+  .log-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 0.75rem;
+    color: var(--text2);
+    max-height: 200px;
+    overflow-y: auto;
+    line-height: 1.8;
+    scroll-behavior: smooth;
+  }
+  .log-box::-webkit-scrollbar { width: 4px; }
+  .log-box::-webkit-scrollbar-track { background: transparent; }
+  .log-box::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  .log-line {
+    animation: slideDown 0.2s var(--ease) both;
+  }
+  .log-box .ok  { color: var(--success); }
+  .log-box .info{ color: var(--accent); }
+  .log-box .warn{ color: var(--warn); }
+  .log-box .err { color: var(--danger); }
+
+  /* Progress bar */
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 99px;
+    overflow: hidden;
+    margin: 1rem 0;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-mid));
+    border-radius: 99px;
+    transition: width 0.4s var(--ease);
+    width: 0%;
+    position: relative;
+  }
+  .progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: 60px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4));
+    animation: shimmer 1.2s infinite;
+    background-size: 200% 100%;
+  }
+
+  /* Summary cards */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+  .summary-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    text-align: center;
+    transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+    animation: countUp 0.4s var(--ease) both;
+  }
+  .summary-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .summary-card .num {
+    font-size: 1.6rem;
+    font-weight: 700;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text2);
+    display: block;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    margin-bottom: 0.35rem;
+  }
+  .summary-card .lbl {
+    font-size: 0.68rem;
+    color: var(--text3);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: block;
+  }
+  .summary-card.new-items {
+    border-color: var(--accent-mid);
+    background: var(--accent-light);
+  }
+  .summary-card.new-items .num { color: var(--accent); }
+  .summary-card:nth-child(1) { animation-delay: 0ms; }
+  .summary-card:nth-child(2) { animation-delay: 60ms; }
+  .summary-card:nth-child(3) { animation-delay: 120ms; }
+  .summary-card:nth-child(4) { animation-delay: 180ms; }
+  .summary-card:nth-child(5) { animation-delay: 240ms; }
+
+  /* Alert */
+  .alert {
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+    font-size: 0.85rem;
+    margin-top: 1rem;
+    border: 1px solid;
+    animation: fadeIn 0.3s var(--ease) both;
+    line-height: 1.6;
+  }
+  .alert-warn { background: var(--warn-light); border-color: var(--warn); color: var(--warn); }
+  .alert-info { background: var(--accent-light); border-color: var(--accent-mid); color: var(--accent); }
+
+  .hidden { display: none !important; }
+  .actions {
+    display: flex;
+    gap: 0.625rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 1.25rem;
+  }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1.25rem 0;
+  }
+
+  /* Conflict table */
+  .conflict-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    margin-top: 0.75rem;
+  }
+  .conflict-table th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text3);
+    font-weight: 500;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .conflict-table td {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text2);
+    vertical-align: top;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .conflict-table tr { transition: background 0.1s; }
+  .conflict-table tr:hover td { background: var(--surface2); }
+  .conflict-table tr:last-child td { border-bottom: none; }
+  .badge-new { color: var(--success); font-weight: 600; }
+  .badge-dup { color: var(--text3); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-icon">📚</div>
+  <h1>JW Library Merger</h1>
+  <span>.jwlibrary</span>
+</header>
+
+<div class="container">
+
+  <!-- Step 1: Load files -->
+  <div class="step" id="step1">
+    <div class="step-header">
+      <div class="step-num">1</div>
+      <div>
+        <div class="step-title">Load your backup files</div>
+        <div class="step-sub">Add two or more .jwlibrary files</div>
+      </div>
+    </div>
+
+    <div class="file-grid" id="fileGrid">
+      <div class="drop-zone" id="drop1">
+        <input type="file" accept=".jwlibrary" id="fileInput1" onchange="loadFile(0, this)">
+        <span class="drop-icon">&#128194;</span>
+        <div class="drop-label">Older backup</div>
+        <div class="drop-hint">drop or click to browse</div>
+      </div>
+      <div class="drop-zone" id="drop2">
+        <input type="file" accept=".jwlibrary" id="fileInput2" onchange="loadFile(1, this)">
+        <span class="drop-icon">&#128194;</span>
+        <div class="drop-label">Newer backup</div>
+        <div class="drop-hint">drop or click to browse</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()" disabled>Analyse files</button>
+      <button class="btn btn-secondary" onclick="addSlot()" id="addMoreBtn">+ Add another file</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Analysis -->
+  <div class="step hidden" id="step2">
+    <div class="step-header">
+      <div class="step-num">2</div>
+      <div>
+        <div class="step-title">Analysis</div>
+        <div class="step-sub">Duplicate check &amp; merge preview</div>
+      </div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="log-box" id="logBox"></div>
+    <div id="summaryArea" class="hidden">
+      <hr>
+      <div class="summary-grid" id="summaryGrid"></div>
+      <div id="conflictArea" class="hidden">
+        <hr>
+        <div style="font-size:0.85rem; color:var(--text2); margin-bottom:0.5rem;">
+          Notes with same GUID but different content (newest version will be kept):
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="conflict-table" id="conflictTable">
+            <thead><tr><th>GUID</th><th>Older title</th><th>Newer title</th><th>Kept</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="mergeBtn" onclick="doMerge()">Merge &amp; download</button>
+        <button class="btn btn-secondary" onclick="reset()">Start over</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: Done -->
+  <div class="step hidden" id="step3">
+    <div class="step-header">
+      <div class="step-num">3</div>
+      <div>
+        <div class="step-title">Done</div>
+        <div class="step-sub">Your merged backup is ready</div>
+      </div>
+    </div>
+    <div class="alert alert-info" id="doneMsg"></div>
+    <div class="actions">
+      <a class="btn btn-download" id="downloadLink" download>&#8659; Download merged file</a>
+      <button class="btn btn-secondary" onclick="reset()">Merge more files</button>
+    </div>
+    <hr>
+    <div style="font-size:0.8rem; color:var(--text3); line-height:1.7;">
+      To restore: open JW Library &rarr; Settings &rarr; Backup and restore &rarr; Restore, and select the merged file.
+    </div>
+  </div>
+
+</div>
+
+<script>
+let SQL = null;
+let loadedFiles = [];
+let analysisResult = null;
+let slotCount = 2;
+
+initSQL();
+
+async function initSQL() {
+  SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+}
+
+function addSlot() {
+  if (slotCount >= 6) return;
+  const idx = slotCount;
+  slotCount++;
+  const grid = document.getElementById('fileGrid');
+  const div = document.createElement('div');
+  div.className = 'drop-zone';
+  div.id = `drop${idx+1}`;
+  div.innerHTML = `<input type="file" accept=".jwlibrary" id="fileInput${idx+1}" onchange="loadFile(${idx}, this)">
+    <span class="drop-icon">&#128194;</span>
+    <div class="drop-label">Backup ${idx+1}</div>
+    <div class="drop-hint">drop or click to browse</div>`;
+  grid.appendChild(div);
+  if (slotCount >= 6) document.getElementById('addMoreBtn').disabled = true;
+}
+
+async function loadFile(idx, input) {
+  const file = input.files[0];
+  if (!file) return;
+  // Show spinner while parsing
+  const drop = document.getElementById(`drop${idx+1}`);
+  if (drop) {
+    drop.innerHTML = `<div class="loading-card"><div class="spinner"></div><span>Reading file…</span></div>`;
+  }
+  const ab = await file.arrayBuffer();
+  const zip = await JSZip.loadAsync(ab);
+  const manifest = JSON.parse(await zip.file('manifest.json').async('string'));
+  const dbBuf = await zip.file('userData.db').async('arraybuffer');
+  const db = new SQL.Database(new Uint8Array(dbBuf));
+  const stats = getStats(db);
+  loadedFiles[idx] = { file, ab, manifest, db, stats, zip };
+  renderFileCard(idx);
+  checkAnalyzeReady();
+}
+
+function getStats(db) {
+  const tables = ['Note','Bookmark','Tag','UserMark','Location','TagMap','BlockRange','InputField','PlaylistItem'];
+  const counts = {};
+  for (const t of tables) {
+    try { counts[t] = db.exec(`SELECT COUNT(*) FROM "${t}"`)[0].values[0][0]; }
+    catch(e) { counts[t] = 0; }
+  }
+  return counts;
+}
+
+function renderFileCard(idx) {
+  const drop = document.getElementById(`drop${idx+1}`);
+  const f = loadedFiles[idx];
+  const d = f.manifest.userDataBackup?.lastModifiedDate || f.manifest.creationDate || '';
+  const dateStr = d ? new Date(d).toLocaleDateString('en-GB', {year:'numeric',month:'short',day:'numeric'}) : '—';
+  const s = f.stats;
+  drop.classList.add('loaded');
+  drop.innerHTML = `
+    <button class="remove-btn" onclick="removeFile(${idx})" title="Remove">&#10005;</button>
+    <div class="file-name">${f.file.name}</div>
+    <div class="file-date">modified ${dateStr}</div>
+    <div class="file-stats">
+      <span class="stat-pill">${s.Note} notes</span>
+      <span class="stat-pill">${s.UserMark} highlights</span>
+      <span class="stat-pill">${s.Bookmark} bookmarks</span>
+      <span class="stat-pill">${s.Tag} tags</span>
+    </div>`;
+}
+
+function removeFile(idx) {
+  loadedFiles[idx] = null;
+  const drop = document.getElementById(`drop${idx+1}`);
+  drop.classList.remove('loaded');
+  drop.innerHTML = `<input type="file" accept=".jwlibrary" id="fileInput${idx+1}" onchange="loadFile(${idx}, this)">
+    <span class="drop-icon">&#128194;</span>
+    <div class="drop-label">Backup ${idx+1}</div>
+    <div class="drop-hint">drop or click to browse</div>`;
+  checkAnalyzeReady();
+}
+
+function checkAnalyzeReady() {
+  const ready = loadedFiles.filter(Boolean).length >= 2;
+  document.getElementById('analyzeBtn').disabled = !ready;
+}
+
+function log(msg, cls='') {
+  const box = document.getElementById('logBox');
+  const line = document.createElement('div');
+  line.className = 'log-line' + (cls ? ' ' + cls : '');
+  line.textContent = msg;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setProgress(p) {
+  document.getElementById('progressFill').style.width = p + '%';
+}
+
+async function analyze() {
+  document.getElementById('step2').classList.remove('hidden');
+  document.getElementById('logBox').innerHTML = '';
+  setProgress(0);
+
+  const files = loadedFiles.filter(Boolean);
+  files.sort((a,b) => {
+    const da = new Date(a.manifest.userDataBackup?.lastModifiedDate || a.manifest.creationDate);
+    const db_ = new Date(b.manifest.userDataBackup?.lastModifiedDate || b.manifest.creationDate);
+    return da - db_;
+  });
+
+  log('Sorted files oldest → newest by modification date', 'info');
+  files.forEach((f,i) => {
+    const d = f.manifest.userDataBackup?.lastModifiedDate || f.manifest.creationDate;
+    log(`  [${i+1}] ${f.file.name}  (${new Date(d).toLocaleDateString()})`, 'info');
+  });
+
+  setProgress(10);
+  log('Analysing notes...', 'info');
+  await sleep(10);
+
+  const newestDb = files[files.length-1].db;
+  const newestStats = files[files.length-1].stats;
+
+  // Collect all GUIDs across files
+  let totalNewNotes = 0, totalNewMarks = 0, totalNewBookmarks = 0, totalNewTags = 0, totalNewInputs = 0;
+  const conflicts = [];
+
+  const newestNoteGuids = new Map();
+  newestDb.exec('SELECT Guid, Title, LastModified FROM Note').forEach(res => {
+    res.values.forEach(([g,t,m]) => newestNoteGuids.set(g, {title:t, mod:m}));
+  });
+
+  for (let i = 0; i < files.length - 1; i++) {
+    const f = files[i];
+    log(`Checking ${f.file.name}...`);
+    const db = f.db;
+
+    // Notes
+    const notes = db.exec('SELECT Guid, Title, LastModified FROM Note')[0]?.values || [];
+    let newN = 0, dupN = 0, conflN = 0;
+    for (const [guid, title, mod] of notes) {
+      if (!newestNoteGuids.has(guid)) { newN++; }
+      else {
+        const newer = newestNoteGuids.get(guid);
+        if (newer.title !== title) {
+          conflN++;
+          if (conflicts.length < 50) {
+            conflicts.push({ guid: guid.slice(0,8)+'...', oldTitle: title||'(no title)', newTitle: newer.title||'(no title)' });
+          }
+        } else { dupN++; }
+      }
+    }
+    log(`  Notes: ${newN} new, ${dupN} duplicates (skipped), ${conflN} updated (newer version kept)`, newN > 0 ? 'ok' : '');
+    totalNewNotes += newN;
+
+    // UserMarks
+    const marks = db.exec('SELECT UserMarkGuid FROM UserMark')[0]?.values || [];
+    const newestMarkGuids = new Set(newestDb.exec('SELECT UserMarkGuid FROM UserMark')[0]?.values.map(r=>r[0]) || []);
+    const newM = marks.filter(([g]) => !newestMarkGuids.has(g)).length;
+    log(`  Highlights: ${newM} new, ${marks.length - newM} duplicates (skipped)`, newM > 0 ? 'ok' : '');
+    totalNewMarks += newM;
+
+    // Tags
+    const tags = db.exec('SELECT Name FROM Tag')[0]?.values || [];
+    const newestTagNames = new Set(newestDb.exec('SELECT Name FROM Tag')[0]?.values.map(r=>r[0]) || []);
+    const newT = tags.filter(([n]) => !newestTagNames.has(n)).length;
+    if (newT > 0) log(`  Tags: ${newT} new`, 'ok');
+    totalNewTags += newT;
+
+    // Bookmarks - by location
+    setProgress(30 + i*20);
+    totalNewBookmarks += 0; // complex, counted during merge
+  }
+
+  setProgress(80);
+  await sleep(10);
+  log('Analysis complete.', 'ok');
+  setProgress(100);
+
+  analysisResult = { files, conflicts, totalNewNotes, totalNewMarks, totalNewTags };
+
+  // Show summary
+  const sg = document.getElementById('summaryGrid');
+  sg.innerHTML = `
+    <div class="summary-card">
+      <span class="num">${files.length}</span>
+      <span class="lbl">files loaded</span>
+    </div>
+    <div class="summary-card new-items">
+      <span class="num">+${totalNewNotes}</span>
+      <span class="lbl">unique notes</span>
+    </div>
+    <div class="summary-card new-items">
+      <span class="num">+${totalNewMarks}</span>
+      <span class="lbl">unique highlights</span>
+    </div>
+    <div class="summary-card new-items">
+      <span class="num">+${totalNewTags}</span>
+      <span class="lbl">unique tags</span>
+    </div>
+    <div class="summary-card">
+      <span class="num">${conflicts.length}</span>
+      <span class="lbl">updated notes</span>
+    </div>`;
+
+  if (conflicts.length > 0) {
+    const tbody = document.querySelector('#conflictTable tbody');
+    tbody.innerHTML = conflicts.map(c => `
+      <tr>
+        <td>${c.guid}</td>
+        <td>${escHtml(c.oldTitle)}</td>
+        <td>${escHtml(c.newTitle)}</td>
+        <td class="badge-new">newer kept</td>
+      </tr>`).join('');
+    document.getElementById('conflictArea').classList.remove('hidden');
+  }
+
+  document.getElementById('summaryArea').classList.remove('hidden');
+
+  // Animate numbers counting up
+  document.querySelectorAll('.summary-card .num').forEach(el => {
+    const target = parseInt(el.textContent.replace('+','')) || 0;
+    const prefix = el.textContent.startsWith('+') ? '+' : '';
+    let start = 0;
+    const duration = 600;
+    const step = timestamp => {
+      if (!start) start = timestamp;
+      const progress = Math.min((timestamp - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - progress, 3);
+      el.textContent = prefix + Math.round(ease * target);
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+async function doMerge() {
+  document.getElementById('mergeBtn').disabled = true;
+  const { files } = analysisResult;
+  log('---', '');
+  log('Starting merge...', 'info');
+  setProgress(0);
+
+  // Use newest as base, copy it
+  const newestFile = files[files.length - 1];
+  const mergedDbBytes = newestFile.db.export();
+  const merge = new SQL.Database(mergedDbBytes);
+
+  function rows(db, q, p=[]) {
+    try {
+      const res = db.exec(q);
+      if (!res.length) return [];
+      return res[0].values.map(v => {
+        const obj = {};
+        res[0].columns.forEach((c,i) => obj[c] = v[i]);
+        return obj;
+      });
+    } catch(e) { return []; }
+  }
+  function scalar(db, q, p=[]) {
+    try { const r = db.exec(q, p); return r.length ? r[0].values[0][0] : null; } catch(e) { return null; }
+  }
+  function run(db, q, p=[]) {
+    try { db.run(q, p); return true; } catch(e) { log('  SQL error: '+e.message, 'err'); return false; }
+  }
+
+  // Get column names of a table from a db
+  function getColumns(db, table) {
+    const res = db.exec(`PRAGMA table_info("${table}")`);
+    if (!res.length) return [];
+    return res[0].values.map(v => v[1]); // column name is index 1
+  }
+
+  // Build an INSERT statement dynamically based on actual columns in target db.
+  // Remaps known ID/foreign-key columns using provided maps.
+  // IMPORTANT: if a foreign key is not found in its map, we use NULL rather than
+  // falling back to the raw source ID — a raw source ID from a different device
+  // would point to a completely wrong location in the target database.
+  function insertRow(targetDb, table, row, idMaps={}, newPk=null, pkCol=null) {
+    const cols = getColumns(targetDb, table);
+    const vals = cols.map(col => {
+      if (pkCol && col === pkCol) return newPk;
+      if (idMaps[col] !== undefined) {
+        const val = row[col];
+        if (val === null || val === undefined) return null;
+        const mapped = idMaps[col][val];
+        if (mapped === undefined) {
+          // Foreign key not found in map — use null instead of raw source value.
+          // Using raw value would silently point to the wrong record on a different device.
+          return null;
+        }
+        return mapped;
+      }
+      // Column exists in target but not in source row -> use null
+      return (row[col] !== undefined) ? row[col] : null;
+    });
+    const placeholders = cols.map(() => '?').join(',');
+    return run(targetDb, `INSERT INTO "${table}" (${cols.map(c=>`"${c}"`).join(',')}) VALUES (${placeholders})`, vals);
+  }
+
+  function locKey(r) {
+    return [r.BookNumber,r.ChapterNumber,r.DocumentId,r.Track,r.IssueTagNumber,r.KeySymbol,r.MepsLanguage,r.Type].join('|');
+  }
+
+  let addedNotes=0, addedMarks=0, addedBRs=0, addedTags=0, addedBMs=0, addedTMs=0, addedIFs=0, addedPIs=0;
+
+  for (let fi = 0; fi < files.length - 1; fi++) {
+    const old = files[fi].db;
+    log(`Merging from: ${files[fi].file.name}`, 'info');
+    setProgress(Math.round((fi / (files.length-1)) * 90));
+    await sleep(5);
+
+    // -- Locations --
+    // Build a complete map of every source LocationId -> target LocationId.
+    // We match by the logical content of the location (publication + chapter + language etc.),
+    // NOT by the numeric ID, because different devices assign IDs independently.
+    // Every source LocationId MUST appear in oldLocMap — any ID left out would cause
+    // insertRow to fall back to null rather than the raw (wrong-device) ID.
+    const newLocs = {};
+    rows(merge, 'SELECT * FROM Location').forEach(r => { newLocs[locKey(r)] = r.LocationId; });
+    const oldLocMap = {};
+    let maxLoc = scalar(merge, 'SELECT MAX(LocationId) FROM Location') || 0;
+    for (const loc of rows(old, 'SELECT * FROM Location')) {
+      const k = locKey(loc);
+      if (newLocs[k] !== undefined) {
+        // Already exists in target — remap source ID to existing target ID
+        oldLocMap[loc.LocationId] = newLocs[k];
+      } else {
+        // New location not in target — insert it and record the new ID
+        maxLoc++;
+        oldLocMap[loc.LocationId] = maxLoc;
+        insertRow(merge, 'Location', loc, {}, maxLoc, 'LocationId');
+        newLocs[k] = maxLoc;
+      }
+    }
+    // Verify: every source LocationId must be mapped
+    const unmappedLocs = rows(old, 'SELECT LocationId FROM Location')
+      .filter(r => oldLocMap[r.LocationId] === undefined);
+    if (unmappedLocs.length > 0) {
+      log(`  ⚠ ${unmappedLocs.length} locations could not be mapped — related notes/highlights skipped`, 'warn');
+    }
+
+    // -- Tags --
+    const newTagNames = {};
+    rows(merge, 'SELECT * FROM Tag').forEach(r => { newTagNames[r.Name] = r.TagId; });
+    const tagMap = {};
+    let maxTag = scalar(merge, 'SELECT MAX(TagId) FROM Tag') || 0;
+    for (const t of rows(old, 'SELECT * FROM Tag')) {
+      if (newTagNames[t.Name] !== undefined) {
+        tagMap[t.TagId] = newTagNames[t.Name];
+      } else {
+        maxTag++;
+        tagMap[t.TagId] = maxTag;
+        insertRow(merge, 'Tag', t, {}, maxTag, 'TagId');
+        newTagNames[t.Name] = maxTag;
+        addedTags++;
+      }
+    }
+
+    // -- UserMarks --
+    // Build complete source->target map for all UserMark IDs (by GUID).
+    // New marks are inserted; existing ones are just remapped.
+    // Both categories must be in umMap before BlockRange/Note use it.
+    const newMarkGuids = {};
+    rows(merge, 'SELECT UserMarkId, UserMarkGuid FROM UserMark').forEach(r => { newMarkGuids[r.UserMarkGuid] = r.UserMarkId; });
+    const umMap = {};
+    let maxUm = scalar(merge, 'SELECT MAX(UserMarkId) FROM UserMark') || 0;
+    const newMarkIdSet = new Set();
+    for (const m of rows(old, 'SELECT * FROM UserMark')) {
+      if (newMarkGuids[m.UserMarkGuid] !== undefined) {
+        // Already exists in target — just remap the ID
+        umMap[m.UserMarkId] = newMarkGuids[m.UserMarkGuid];
+      } else {
+        // New mark — insert and record
+        maxUm++;
+        umMap[m.UserMarkId] = maxUm;
+        insertRow(merge, 'UserMark', m, { LocationId: oldLocMap }, maxUm, 'UserMarkId');
+        newMarkGuids[m.UserMarkGuid] = maxUm;
+        newMarkIdSet.add(m.UserMarkId);
+        addedMarks++;
+      }
+    }
+
+    // -- BlockRanges --
+    // Only insert BlockRanges for marks that are new (existing marks already have their ranges).
+    let maxBr = scalar(merge, 'SELECT MAX(BlockRangeId) FROM BlockRange') || 0;
+    for (const br of rows(old, 'SELECT * FROM BlockRange')) {
+      if (newMarkIdSet.has(br.UserMarkId)) {
+        maxBr++;
+        insertRow(merge, 'BlockRange', br, { UserMarkId: umMap }, maxBr, 'BlockRangeId');
+        addedBRs++;
+      }
+    }
+
+    // -- Notes --
+    // Map every source NoteId -> target NoteId (by GUID).
+    // insertRow will use oldLocMap and umMap for foreign keys — both are complete at this point,
+    // so no note will be anchored to a wrong-device LocationId.
+    const newNoteGuids = {};
+    rows(merge, 'SELECT NoteId, Guid FROM Note').forEach(r => { newNoteGuids[r.Guid] = r.NoteId; });
+    const noteMap = {};
+    let maxNote = scalar(merge, 'SELECT MAX(NoteId) FROM Note') || 0;
+    const newNoteIdSet = new Set();
+    for (const n of rows(old, 'SELECT * FROM Note')) {
+      if (newNoteGuids[n.Guid] !== undefined) {
+        noteMap[n.NoteId] = newNoteGuids[n.Guid];
+      } else {
+        maxNote++;
+        noteMap[n.NoteId] = maxNote;
+        insertRow(merge, 'Note', n, { LocationId: oldLocMap, UserMarkId: umMap }, maxNote, 'NoteId');
+        newNoteGuids[n.Guid] = maxNote;
+        newNoteIdSet.add(n.NoteId);
+        addedNotes++;
+      }
+    }
+
+    // -- Bookmarks --
+    // Build a set of existing (slot) keys to avoid all unique constraint violations
+    const existingBmSlots = new Set(
+      rows(merge, 'SELECT Slot FROM Bookmark').map(r => r.Slot)
+    );
+    let maxBm = scalar(merge, 'SELECT MAX(BookmarkId) FROM Bookmark') || 0;
+    for (const bm of rows(old, 'SELECT * FROM Bookmark')) {
+      // Slot must be globally unique across all bookmarks
+      if (existingBmSlots.has(bm.Slot)) continue;
+      maxBm++;
+      const ok = insertRow(merge, 'Bookmark', bm,
+        { LocationId: oldLocMap, PublicationLocationId: oldLocMap },
+        maxBm, 'BookmarkId');
+      if (ok) {
+        existingBmSlots.add(bm.Slot);
+        addedBMs++;
+      }
+    }
+
+    // -- IndependentMedia --
+    // FilePath is a UUID — globally unique key across devices.
+    // Must be merged BEFORE PlaylistItem because PlaylistItem.ThumbnailFilePath references it.
+    const newMediaPaths = {};
+    rows(merge, 'SELECT IndependentMediaId, FilePath FROM IndependentMedia').forEach(r => {
+      newMediaPaths[r.FilePath] = r.IndependentMediaId;
+    });
+    const mediaIdMap = {}; // old IndependentMediaId -> merged IndependentMediaId
+    let maxMedia = scalar(merge, 'SELECT MAX(IndependentMediaId) FROM IndependentMedia') || 0;
+    for (const m of rows(old, 'SELECT * FROM IndependentMedia')) {
+      if (newMediaPaths[m.FilePath] !== undefined) {
+        mediaIdMap[m.IndependentMediaId] = newMediaPaths[m.FilePath];
+      } else {
+        maxMedia++;
+        mediaIdMap[m.IndependentMediaId] = maxMedia;
+        insertRow(merge, 'IndependentMedia', m, {}, maxMedia, 'IndependentMediaId');
+        newMediaPaths[m.FilePath] = maxMedia;
+      }
+    }
+
+    // -- PlaylistItem --
+    // No GUID exists — use (Label + ThumbnailFilePath) as unique key.
+    // ThumbnailFilePath is a UUID from IndependentMedia.FilePath, so it's device-independent.
+    const newPlaylistItems = {};
+    rows(merge, 'SELECT PlaylistItemId, Label, ThumbnailFilePath FROM PlaylistItem').forEach(r => {
+      newPlaylistItems[`${r.Label}|${r.ThumbnailFilePath}`] = r.PlaylistItemId;
+    });
+    const playlistItemIdMap = {}; // old PlaylistItemId -> merged PlaylistItemId
+    let maxPi = scalar(merge, 'SELECT MAX(PlaylistItemId) FROM PlaylistItem') || 0;
+    let addedPIs = 0;
+    for (const pi of rows(old, 'SELECT * FROM PlaylistItem')) {
+      const key = `${pi.Label}|${pi.ThumbnailFilePath}`;
+      if (newPlaylistItems[key] !== undefined) {
+        playlistItemIdMap[pi.PlaylistItemId] = newPlaylistItems[key];
+      } else {
+        maxPi++;
+        playlistItemIdMap[pi.PlaylistItemId] = maxPi;
+        insertRow(merge, 'PlaylistItem', pi, {}, maxPi, 'PlaylistItemId');
+        newPlaylistItems[key] = maxPi;
+        addedPIs++;
+      }
+    }
+
+    // -- PlaylistItemLocationMap --
+    const existingPiLoc = new Set(
+      rows(merge, 'SELECT PlaylistItemId, LocationId FROM PlaylistItemLocationMap')
+        .map(r => `${r.PlaylistItemId}|${r.LocationId}`)
+    );
+    for (const lm of rows(old, 'SELECT * FROM PlaylistItemLocationMap')) {
+      const newPid = playlistItemIdMap[lm.PlaylistItemId];
+      const newLoc = oldLocMap[lm.LocationId];
+      if (newPid === undefined || newLoc === undefined) continue;
+      const key = `${newPid}|${newLoc}`;
+      if (!existingPiLoc.has(key)) {
+        run(merge, `INSERT INTO PlaylistItemLocationMap VALUES (?,?,?,?)`,
+          [newPid, newLoc, lm.MajorMultimediaType, lm.BaseDurationTicks]);
+        existingPiLoc.add(key);
+      }
+    }
+
+    // -- PlaylistItemIndependentMediaMap --
+    const existingPiMedia = new Set(
+      rows(merge, 'SELECT PlaylistItemId, IndependentMediaId FROM PlaylistItemIndependentMediaMap')
+        .map(r => `${r.PlaylistItemId}|${r.IndependentMediaId}`)
+    );
+    for (const imm of rows(old, 'SELECT * FROM PlaylistItemIndependentMediaMap')) {
+      const newPid = playlistItemIdMap[imm.PlaylistItemId];
+      const newMid = mediaIdMap[imm.IndependentMediaId];
+      if (newPid === undefined || newMid === undefined) continue;
+      const key = `${newPid}|${newMid}`;
+      if (!existingPiMedia.has(key)) {
+        run(merge, `INSERT INTO PlaylistItemIndependentMediaMap VALUES (?,?,?)`,
+          [newPid, newMid, imm.DurationTicks]);
+        existingPiMedia.add(key);
+      }
+    }
+
+    // -- TagMaps --
+    // PlaylistItem TagMaps use remapped playlistItemIdMap — raw source IDs are meaningless in target.
+    const byNote = new Set(rows(merge,'SELECT TagId,NoteId FROM TagMap WHERE NoteId IS NOT NULL').map(r=>`${r.TagId}|${r.NoteId}`));
+    const byLoc  = new Set(rows(merge,'SELECT TagId,LocationId FROM TagMap WHERE LocationId IS NOT NULL').map(r=>`${r.TagId}|${r.LocationId}`));
+    const byPl   = new Set(rows(merge,'SELECT TagId,PlaylistItemId FROM TagMap WHERE PlaylistItemId IS NOT NULL').map(r=>`${r.TagId}|${r.PlaylistItemId}`));
+    const maxPos = {};
+    rows(merge,'SELECT TagId,MAX(Position) as mp FROM TagMap GROUP BY TagId').forEach(r => { maxPos[r.TagId] = r.mp; });
+    let maxTm = scalar(merge,'SELECT MAX(TagMapId) FROM TagMap') || 0;
+    for (const tm of rows(old,'SELECT * FROM TagMap')) {
+      const tid = tagMap[tm.TagId] ?? tm.TagId;
+      const loc = tm.LocationId ? (oldLocMap[tm.LocationId] ?? null) : null;
+      const nid = tm.NoteId ? (noteMap[tm.NoteId] ?? null) : null;
+      const pid = tm.PlaylistItemId ? (playlistItemIdMap[tm.PlaylistItemId] ?? null) : null;
+
+      // TagMap CHECK constraint requires exactly one of (NoteId, LocationId, PlaylistItemId) to be set.
+      // If remapping lost the reference (mapped to null), skip the row entirely.
+      const setCount = (nid !== null ? 1 : 0) + (loc !== null ? 1 : 0) + (pid !== null ? 1 : 0);
+      if (setCount !== 1) continue;
+
+      let skip = false;
+      if (nid !== null && byNote.has(`${tid}|${nid}`)) skip = true;
+      else if (loc !== null && byLoc.has(`${tid}|${loc}`)) skip = true;
+      else if (pid !== null && byPl.has(`${tid}|${pid}`)) skip = true;
+      if (!skip) {
+        maxTm++;
+        const pos = (maxPos[tid] ?? -1) + 1;
+        maxPos[tid] = pos;
+        run(merge, `INSERT INTO TagMap VALUES (?,?,?,?,?,?)`, [maxTm, pid, loc, nid, tid, pos]);
+        if (nid !== null) byNote.add(`${tid}|${nid}`);
+        else if (loc !== null) byLoc.add(`${tid}|${loc}`);
+        else if (pid !== null) byPl.add(`${tid}|${pid}`);
+        addedTMs++;
+      }
+    }
+
+    // -- InputFields --
+    const ifKeys = new Set(rows(merge,'SELECT LocationId,TextTag FROM InputField').map(r=>`${r.LocationId}|${r.TextTag}`));
+    for (const inf of rows(old,'SELECT * FROM InputField')) {
+      const loc = oldLocMap[inf.LocationId] ?? null;
+      if (loc === null) continue;
+      if (!ifKeys.has(`${loc}|${inf.TextTag}`)) {
+        run(merge, `INSERT INTO InputField VALUES (?,?,?)`, [loc, inf.TextTag, inf.Value]);
+        ifKeys.add(`${loc}|${inf.TextTag}`);
+        addedIFs++;
+      }
+    }
+
+    log(`  + ${addedNotes} notes, ${addedMarks} highlights, ${addedBMs} bookmarks, ${addedTags} tags, ${addedPIs} playlist items`, 'ok');
+  }
+
+  // Build new manifest + zip
+  setProgress(95);
+  log('Packaging output file...', 'info');
+  await sleep(5);
+
+  const mergedBytes = merge.export();
+  const hashHex = await sha256hex(mergedBytes);
+  const baseManifest = JSON.parse(await newestFile.zip.file('manifest.json').async('string'));
+  baseManifest.userDataBackup.hash = hashHex;
+
+  const outZip = new JSZip();
+  outZip.file('manifest.json', JSON.stringify(baseManifest));
+  outZip.file('userData.db', mergedBytes);
+  // Copy all non-db, non-manifest files from newest backup
+  const newestZip = newestFile.zip;
+  for (const [name, zobj] of Object.entries(newestZip.files)) {
+    if (name === 'userData.db' || name === 'manifest.json' || zobj.dir) continue;
+    const buf = await zobj.async('arraybuffer');
+    outZip.file(name, buf);
+  }
+
+  const blob = await outZip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  const url = URL.createObjectURL(blob);
+  const dateStr = new Date().toISOString().slice(0,10);
+  const fname = `${dateStr}_MERGED.jwlibrary`;
+
+  document.getElementById('downloadLink').href = url;
+  document.getElementById('downloadLink').download = fname;
+  document.getElementById('doneMsg').textContent =
+    `Merged ${files.length} backups. Added ${addedNotes} notes, ${addedMarks} highlights, ${addedBMs} bookmarks, ${addedTags} tags, ${addedPIs} playlist items from older backups. ${analysisResult.conflicts.length} notes had conflicts — newer version was kept.`;
+
+  setProgress(100);
+  log('Done!', 'ok');
+  // Mark step nums as done
+  document.querySelectorAll('.step-num').forEach(el => el.classList.add('done'));
+  document.getElementById('step3').classList.remove('hidden');
+  document.getElementById('step3').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function sha256hex(bytes) {
+  const buf = await crypto.subtle.digest('SHA-256', bytes.buffer || bytes);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function reset() {
+  loadedFiles = [];
+  analysisResult = null;
+  slotCount = 2;
+  document.getElementById('fileGrid').innerHTML = `
+    <div class="drop-zone" id="drop1">
+      <input type="file" accept=".jwlibrary" id="fileInput1" onchange="loadFile(0, this)">
+      <span class="drop-icon">&#128194;</span>
+      <div class="drop-label">Older backup</div>
+      <div class="drop-hint">drop or click to browse</div>
+    </div>
+    <div class="drop-zone" id="drop2">
+      <input type="file" accept=".jwlibrary" id="fileInput2" onchange="loadFile(1, this)">
+      <span class="drop-icon">&#128194;</span>
+      <div class="drop-label">Newer backup</div>
+      <div class="drop-hint">drop or click to browse</div>
+    </div>`;
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('addMoreBtn').disabled = false;
+  document.getElementById('step2').classList.add('hidden');
+  document.getElementById('step3').classList.add('hidden');
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('summaryArea').classList.add('hidden');
+  document.getElementById('conflictArea').classList.add('hidden');
+  document.getElementById('mergeBtn').disabled = false;
+  setProgress(0);
+}
+
+// Drag and drop support
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const files = [...e.dataTransfer.files].filter(f => f.name.endsWith('.jwlibrary'));
+  files.forEach((file, i) => {
+    const idx = i < slotCount ? i : null;
+    if (idx !== null) {
+      const fake = { files: [file] };
+      loadFile(idx, fake);
+    }
+  });
+});
+</script>
+</body>
+</html>
