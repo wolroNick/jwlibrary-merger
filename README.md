@@ -24,11 +24,11 @@ Nie trzeba niczego instalować. Wystarczy otworzyć plik `jwlibrary-merger.html`
 
 ### 1. Wgraj pliki
 
-Na ekranie startowym są dwa pola do wgrania plików — **„Older backup"** i **„Newer backup"**. Wgraj do nich swoje pliki `.jwlibrary` (przeciągnij albo kliknij, żeby wybrać z dysku). Jeśli masz więcej niż dwa backupy do scalenia (np. z trzech urządzeń), kliknij **„+ Add another file"**, żeby dodać kolejne pole.
+Wgraj swoje pliki `.jwlibrary` do pól **„Backup 1”**, **„Backup 2”** (przeciągnij plik na pole albo kliknij, żeby wybrać z dysku) albo zaznacz kilka naraz przyciskiem **„Choose several files…”**. Możesz scalić do 6 plików; kolejne pole dodasz przyciskiem **„+ Add another slot”**.
 
 Nie musisz się martwić, do którego pola trafi który plik — aplikacja sama sortuje je chronologicznie na podstawie daty ostatniej modyfikacji.
 
-Każdy wgrany plik pokazuje krótkie podsumowanie (liczba notatek, zaznaczeń, zakładek, tagów), żebyś mógł zweryfikować, że to właściwy plik.
+Każdy wgrany plik pokazuje urządzenie, datę i krótkie podsumowanie (liczba notatek, zaznaczeń, zakładek, tagów), żebyś mógł zweryfikować, że to właściwy plik. Jeśli ten sam plik wgrasz dwa razy, zostanie użyty tylko raz.
 
 **Jeśli plik jest uszkodzony** albo nie jest poprawnym backupem `.jwlibrary` (np. brakuje w nim `manifest.json` lub `userData.db`), pole pokaże czerwony komunikat błędu z opisem problemu — możesz wtedy wgrać inny plik w to samo miejsce.
 
@@ -36,18 +36,18 @@ Każdy wgrany plik pokazuje krótkie podsumowanie (liczba notatek, zaznaczeń, z
 
 Przycisk aktywuje się po wgraniu co najmniej dwóch plików. Aplikacja:
 
-- sortuje pliki od najstarszego do najnowszego,
-- porównuje zawartość każdego starszego backupu z najnowszym,
-- pokazuje w logu, ile nowych notatek, zaznaczeń, zakładek i tagów zostanie dodanych z każdego starszego pliku,
-- wyświetla tabelę **konfliktów** — czyli notatek, które istnieją w obu backupach pod tym samym identyfikatorem, ale mają inną treść lub tytuł (np. edytowałeś tę samą notatkę na dwóch urządzeniach).
+- sortuje pliki od najstarszego do najnowszego (najnowszy jest bazą),
+- wykonuje **próbne scalenie** — liczby w podsumowaniu są dokładnie tymi, które trafią do wyniku,
+- wyświetla tabelę **konfliktów** — notatek edytowanych inaczej na dwóch urządzeniach,
+- pokazuje **listę elementów, które zostaną dodane ze starszych backupów** (notatki, zaznaczenia, zakładki) z polami wyboru — patrz „Usunięte elementy” niżej.
 
 ### 3. Kliknij „Merge & download"
 
-Aplikacja tworzy nowy, scalony plik i automatycznie zaczyna jego pobieranie: `RRRR-MM-DD_MERGED.jwlibrary`.
+Aplikacja tworzy nowy, scalony plik, sprawdza spójność bazy i pokazuje przycisk do pobrania pliku `RRRR-MM-DD_MERGED.jwlibrary`.
 
 ### 4. Zaimportuj scalony plik w JW Library
 
-**JW Library → Ustawienia → Kopia zapasowa → Przywórz** i wybierz nowo pobrany plik.
+**JW Library → Ustawienia → Kopia zapasowa → Przywróć** i wybierz nowo pobrany plik.
 
 > **Zanim to zrobisz:** zachowaj gdzieś oryginalne pliki `.jwlibrary`, na wszelki wypadek. Import w JW Library zastępuje bieżące dane na urządzeniu.
 
@@ -59,14 +59,17 @@ Aplikacja tworzy nowy, scalony plik i automatycznie zaczyna jego pobieranie: `RR
 |---|---|
 | Notatki (Note) | patrz sekcja „Jak działają konflikty notatek" poniżej |
 | Zaznaczenia (UserMark + BlockRange) | dopasowywane po unikalnym identyfikatorze zaznaczenia |
-| Zakładki (Bookmark) | z uwzględnieniem unikalności slotu zakładki |
+| Zakładki (Bookmark) | jeśli slot w danej publikacji jest zajęty, zakładka trafia do wolnego slotu |
 | Tagi (Tag) i przypisania tagów (TagMap) | tagi o tej samej nazwie nie są duplikowane |
 | Miejsca w publikacjach (Location) | używane wewnętrznie do poprawnego dopasowania notatek/zaznaczeń/zakładek |
-| Pola formularzy w zeszytach (InputField) | np. wypełnione pola w publikacjach typu „zeszyt" |
+| Pola formularzy w zeszytach (InputField) | np. wypełnione pola w publikacjach typu „zeszyt"; przy różnicy zostaje wartość z najnowszego backupu |
+| Playlisty (PlaylistItem, znaczniki, multimedia) | razem z plikami obrazów i nagrań ze wszystkich backupów |
 
-## Czego aplikacja **nie** scala
+## Usunięte elementy
 
-- **Playlisty** (`PlaylistItem` i powiązane tabele) — nie są obecnie obsługiwane. Jeśli korzystasz z playlist w JW Library, ta funkcja nie przeniesie ich z starszego backupu.
+JW Library nie zapisuje informacji o usunięciu. Jeśli usunąłeś notatkę na nowszym urządzeniu, a jest ona w starszym backupie, przy scalaniu by „wróciła”. Dlatego w kroku 2 widzisz listę wszystkiego, co zostanie dodane ze starszych backupów, i możesz odznaczyć to, czego nie chcesz.
+
+Elementy oznaczone **„probably deleted”** są w starszym backupie urządzenia, ale brakuje ich w nowszym backupie **tego samego** urządzenia — prawie na pewno zostały tam usunięte, więc domyślnie są odznaczone.
 
 ## Jak działają konflikty notatek
 
@@ -74,8 +77,8 @@ Konflikt to sytuacja, w której **ta sama notatka** (ten sam wewnętrzny identyf
 
 W takim przypadku aplikacja **nie usuwa żadnej wersji**:
 
-1. Nowsza wersja notatki zostaje w scalonym pliku bez zmian.
-2. Starsza wersja jest dodawana jako **osobna, nowa notatka**, z tytułem poprzedzonym `[Older version]`.
+1. Wersja **edytowana najpóźniej** (według daty zmiany samej notatki) zostaje jako właściwa notatka.
+2. Druga wersja jest dodawana jako **osobna, nowa notatka**, z tytułem poprzedzonym `[Older version]`.
 3. Możesz później otworzyć obie notatki w JW Library, porównać je i ręcznie scalić lub usunąć tę, która jest zbędna.
 
 Konflikty są widoczne w tabeli już na etapie analizy (krok 2), zanim jeszcze pobierzesz scalony plik.
@@ -85,8 +88,9 @@ Konflikty są widoczne w tabeli już na etapie analizy (krok 2), zanim jeszcze p
 Aplikacja pokazuje w logu ostrzeżenia (żółte/pomarańczowe wpisy), jeśli:
 
 - **Data w manifeście jednego z plików jest brakująca lub niepoprawna** — aplikacja wtedy sama próbuje ustalić datę na podstawie zawartości bazy albo daty modyfikacji samego pliku, żeby nie pomylić kolejności „starszy → nowszy".
-- **Backupy mają różne wersje schematu bazy** (`schemaVersion` w manifeście) — może to oznaczać, że pliki pochodzą z bardzo różnych wersji JW Library i scalenie może się nie powiedzie lub dać niekompletny wynik.
-- **Podczas scalania wystąpiły błędy SQL** — w takim wypadku pobrany plik i tak zostanie utworzony, ale ostrzeżenie (widoczne również na ekranie końcowym) sygnalizuje, że warto dokładnie zweryfikować wynik przed zaimportowaniem go i usunięciem oryginałów.
+- **Backupy mają różne wersje schematu bazy** (`schemaVersion` w manifeście) — pliki pochodzą z różnych wersji JW Library. Najlepiej zaktualizować aplikację na wszystkich urządzeniach i zrobić świeże backupy.
+- **Nie udało się skopiować części rekordów albo kontrola spójności wykryła problem** — plik i tak zostanie utworzony, ale ekran końcowy pokaże ostrzeżenie: zweryfikuj wynik przed zaimportowaniem go i usunięciem oryginałów.
+- **Zakładka nie zmieściła się** — publikacja ma tylko 10 slotów; jeśli wszystkie są zajęte, zakładka ze starszego backupu jest pomijana.
 
 ## Bezpieczeństwo i prywatność
 
