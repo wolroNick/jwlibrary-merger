@@ -1,133 +1,238 @@
-# JW Library Merger — README
+# JW Library Merger
 
-Aplikacja webowa do **scalania dwóch lub więcej kopii zapasowych `.jwlibrary`** — np. backupu z telefonu i z tabletu — w jeden plik, bez utraty notatek, zaznaczeń, zakładek i tagów z żadnego z urządzeń. Pozwala też **edytować pojedynczy backup** (zakładka „Edit backup”). Działa na komputerze i na telefonie.
+Aplikacja w przeglądarce do **scalania** i **edycji** kopii zapasowych JW Library (pliki `.jwlibrary`).
 
-Cały proces działa **lokalnie w przeglądarce**. Żaden plik ani żadne dane nie są wysyłane na jakikolwiek serwer.
+- **Merge**: łączy kopie z kilku urządzeń (np. telefonu i tabletu) w jeden plik, bez utraty notatek, zaznaczeń, zakładek, tagów i playlist.
+- **Edit backup**: pozwala przejrzeć i poprawić jedną kopię: edytować lub usuwać notatki, zmieniać kolory zaznaczeń, porządkować tagi.
 
-**Otwórz aplikację:** https://wolronick.github.io/jwlibrary-merger/
+Działa na komputerze i na telefonie, także bez internetu. **Twoje pliki nigdy nie opuszczają urządzenia.** Całe przetwarzanie odbywa się w przeglądarce.
+
+### ▶ Otwórz aplikację: https://wolronick.github.io/jwlibrary-merger/
+
+> To nieoficjalne narzędzie, niezwiązane z twórcami JW Library. Zanim przywrócisz w JW Library plik przygotowany przez tę aplikację, **zachowaj oryginalne kopie**.
 
 ---
 
-## Wymagania
+## Spis treści
 
-- Nowoczesna przeglądarka (Chrome, Firefox, Edge lub Safari) z włączonym JavaScriptem — na komputerze albo na telefonie.
-- Pliki `.jwlibrary`, które chcesz scalić (co najmniej dwa) albo edytować.
+1. [Uruchomienie](#uruchomienie)
+2. [Scalanie kopii — krok po kroku](#scalanie-kopii--krok-po-kroku)
+3. [Edycja kopii — krok po kroku](#edycja-kopii--krok-po-kroku)
+4. [Jak działa scalanie](#jak-działa-scalanie)
+5. [Co zrobić, gdy…](#co-zrobić-gdy)
+6. [Prywatność i bezpieczeństwo](#prywatność-i-bezpieczeństwo)
+7. [Dobre praktyki](#dobre-praktyki)
+8. [Dla programistów](#dla-programistów)
 
-## Jak uruchomić
+---
 
-### Z internetu (zalecane)
+## Uruchomienie
 
-Otwórz https://wolronick.github.io/jwlibrary-merger/ — zawsze najnowsza wersja. Po pierwszym otwarciu strona działa także **bez internetu**.
+### W przeglądarce (zalecane)
 
-### Jako aplikacja na telefonie lub komputerze
+Otwórz https://wolronick.github.io/jwlibrary-merger/. Zawsze dostajesz najnowszą wersję. Po pierwszym otwarciu strona działa także **offline**.
 
-- **Android (Chrome):** otwórz stronę → menu ⋮ → **„Zainstaluj aplikację”** (albo **„Dodaj do ekranu głównego”**). Możesz też kliknąć przycisk **Install** w nagłówku, jeśli się pojawi.
-- **iPhone / iPad (Safari):** otwórz stronę → przycisk **Udostępnij** → **„Do ekranu początkowego”**.
-- **Komputer (Chrome / Edge):** ikona instalacji na pasku adresu albo przycisk **Install** w nagłówku.
+### Jako aplikacja (ikona na ekranie)
 
-Ikona „JWL Merger” pojawi się obok innych aplikacji, a aplikacja otworzy się w osobnym oknie i zadziała offline.
+| Urządzenie | Jak zainstalować |
+|---|---|
+| **Android** (Chrome) | menu **⋮** → **Zainstaluj aplikację** (lub **Dodaj do ekranu głównego**) |
+| **iPhone / iPad** (Safari) | przycisk **Udostępnij** → **Do ekranu początkowego** |
+| **Komputer** (Chrome / Edge) | ikona instalacji na pasku adresu albo przycisk **Install** w nagłówku aplikacji |
+
+Pojawi się ikona **JWL Merger**, a aplikacja otworzy się w osobnym oknie. Aktualizacje pobiera sama przy otwarciu z internetem. Czasem trzeba ją otworzyć dwa razy, żeby zobaczyć nową wersję.
 
 ### Z pliku na dysku
 
-Pobierz repozytorium (**Code → Download ZIP**), rozpakuj i otwórz `index.html` dwuklikiem. Działa też sam plik `index.html` — wtedy przy otwarciu potrzebny jest internet, bo biblioteki `sql.js` i `JSZip` są wczytywane z CDN zamiast z folderu `vendor/`.
-
-### Na telefonie — wybór i zapis plików
-
-- Pliki `.jwlibrary` wybierasz z „Pobranych”, Dysku Google, iCloud itp. — aplikacja sama sprawdza, czy plik jest poprawnym backupem.
-- Gotowy plik pobierasz przyciskiem **Download**. Jeśli przeglądarka pozwala, pojawi się też **Share…** — otwiera systemowe menu udostępniania (np. zapis na Dysku Google albo wysłanie do JW Library). Na Androidzie Chrome nie pozwala udostępniać plików `.jwlibrary`, więc przycisku **Share…** tam nie ma — użyj **Download**, a potem w JW Library (Ustawienia → Kopia zapasowa → Przywróć) wybierz plik z folderu „Pobrane” albo otwórz go w aplikacji **Pliki** i wybierz Udostępnij → JW Library.
-
-## Krok po kroku
-
-### 1. Wgraj pliki
-
-Wgraj swoje pliki `.jwlibrary` do pól **„Backup 1”**, **„Backup 2”** (przeciągnij plik na pole albo kliknij, żeby wybrać z dysku) albo zaznacz kilka naraz przyciskiem **„Choose several files…”**. Możesz scalić do 6 plików; kolejne pole dodasz przyciskiem **„+ Add another slot”**.
-
-Nie musisz się martwić, do którego pola trafi który plik — aplikacja sama sortuje je chronologicznie na podstawie daty ostatniej modyfikacji.
-
-Każdy wgrany plik pokazuje urządzenie, datę i krótkie podsumowanie (liczba notatek, zaznaczeń, zakładek, tagów), żebyś mógł zweryfikować, że to właściwy plik. Jeśli ten sam plik wgrasz dwa razy, zostanie użyty tylko raz.
-
-**Jeśli plik jest uszkodzony** albo nie jest poprawnym backupem `.jwlibrary` (np. brakuje w nim `manifest.json` lub `userData.db`), pole pokaże czerwony komunikat błędu z opisem problemu — możesz wtedy wgrać inny plik w to samo miejsce.
-
-### 2. Kliknij „Analyse files"
-
-Przycisk aktywuje się po wgraniu co najmniej dwóch plików. Aplikacja:
-
-- sortuje pliki od najstarszego do najnowszego (najnowszy jest bazą),
-- wykonuje **próbne scalenie** — liczby w podsumowaniu są dokładnie tymi, które trafią do wyniku,
-- wyświetla tabelę **konfliktów** — notatek edytowanych inaczej na dwóch urządzeniach,
-- pokazuje **listę elementów, które zostaną dodane ze starszych backupów** (notatki, zaznaczenia, zakładki) z polami wyboru — patrz „Usunięte elementy” niżej.
-
-### 3. Kliknij „Merge & download"
-
-Aplikacja tworzy nowy, scalony plik, sprawdza spójność bazy i pokazuje przycisk do pobrania pliku `RRRR-MM-DD_MERGED.jwlibrary`.
-
-### 4. Zaimportuj scalony plik w JW Library
-
-**JW Library → Ustawienia → Kopia zapasowa → Przywróć** i wybierz nowo pobrany plik.
-
-> **Zanim to zrobisz:** zachowaj gdzieś oryginalne pliki `.jwlibrary`, na wszelki wypadek. Import w JW Library zastępuje bieżące dane na urządzeniu.
+Na stronie repozytorium wybierz **Code → Download ZIP**, rozpakuj archiwum i otwórz `index.html` dwuklikiem. Sam plik `index.html` bez folderu `vendor/` też zadziała, ale wtedy przy otwarciu potrzebny jest internet, bo biblioteki zostaną pobrane z CDN.
 
 ---
 
-## Co jest scalane
+## Scalanie kopii — krok po kroku
 
-| Dane | Uwagi |
+Zakładka **Merge** (otwiera się domyślnie).
+
+### 1. Wczytaj pliki
+
+- Przeciągnij plik na pole **Backup 1**, **Backup 2**… albo kliknij pole i wybierz plik.
+- Możesz też zaznaczyć kilka plików naraz przyciskiem **Choose several files…**.
+- Naraz można scalić do **6 plików**. Kolejne pola dodasz przyciskiem **+ Add another slot**.
+
+Kolejność nie ma znaczenia: aplikacja sama sortuje kopie od najstarszej do najnowszej, a **najnowsza staje się bazą**. Przy każdym pliku widać urządzenie, datę i liczbę notatek, zaznaczeń, zakładek i tagów.
+
+Jeśli plik jest uszkodzony albo nie jest kopią JW Library, pole zaświeci się na czerwono z opisem problemu. Ten sam plik wczytany dwa razy zostanie użyty tylko raz.
+
+### 2. Analiza: „Analyse files”
+
+Aplikacja wykonuje **próbne scalenie**, więc liczby w podsumowaniu to dokładnie to, co trafi do wyniku. Zobaczysz:
+
+- **podsumowanie**: ile notatek, zaznaczeń, zakładek i tagów dojdzie ze starszych kopii;
+- **ostrzeżenia**, jeśli coś wymaga uwagi (patrz [Ostrzeżenia](#ostrzeżenia));
+- **tabelę konfliktów**, czyli notatek edytowanych inaczej na dwóch urządzeniach (patrz [Konflikty notatek](#konflikty-notatek));
+- **listę elementów dodawanych ze starszych kopii**, z polami wyboru i wyszukiwarką. **Odznacz to, czego nie chcesz**, np. notatki usunięte celowo (patrz [Usunięte elementy](#usunięte-elementy)).
+
+### 3. Scalenie: „Merge & download”
+
+Aplikacja tworzy plik `RRRR-MM-DD_MERGED.jwlibrary`, sprawdza spójność bazy i pokazuje przycisk **Download merged file**. Jeśli kontrola coś wykryje, na ekranie końcowym pojawi się żółte ostrzeżenie.
+
+### 4. Przywrócenie w JW Library
+
+1. Przenieś plik na urządzenie, na którym chcesz mieć scalone dane.
+2. W JW Library otwórz **Ustawienia → Kopia zapasowa → Przywróć** i wybierz plik. Nazwy w menu mogą się nieco różnić w zależności od wersji aplikacji.
+
+> ⚠️ Przywrócenie **zastępuje** wszystkie dane JW Library na tym urządzeniu. Zachowaj oryginalne kopie, dopóki nie sprawdzisz wyniku.
+
+**Na telefonie:**
+- **Android**: plik trafia do folderu **Pobrane**. Wybierz go w JW Library albo otwórz w aplikacji **Pliki** i stuknij **Udostępnij → JW Library**. Chrome na Androidzie nie pozwala stronom udostępniać plików `.jwlibrary`, dlatego nie ma tam przycisku „Share…”.
+- **iPhone / iPad**: przycisk **Share…** otwiera systemowe menu udostępniania. Wybierz JW Library albo zapisz plik w aplikacji Pliki lub na Dysku Google.
+
+---
+
+## Edycja kopii — krok po kroku
+
+Zakładka **Edit backup** w nagłówku. Zastępuje dawny skrypt `jwlibrary_tools.py`.
+
+### 1. Otwórz kopię
+
+Wybierz jeden plik `.jwlibrary`. Zobaczysz urządzenie, datę, wersję schematu, liczbę elementów oraz to, czy **hash** w `manifest.json` zgadza się z bazą. Niezgodny hash zostanie poprawiony przy zapisie.
+
+### 2. Przeglądaj i edytuj
+
+Stuknij element na liście, żeby go edytować. Zmiany są trzymane w pamięci do czasu zapisu.
+
+| Tryb | Co możesz zrobić |
 |---|---|
-| Notatki (Note) | patrz sekcja „Jak działają konflikty notatek" poniżej |
-| Zaznaczenia (UserMark + BlockRange) | dopasowywane po unikalnym identyfikatorze zaznaczenia |
-| Zakładki (Bookmark) | jeśli slot w danej publikacji jest zajęty, zakładka trafia do wolnego slotu |
-| Tagi (Tag) i przypisania tagów (TagMap) | tagi o tej samej nazwie nie są duplikowane |
-| Miejsca w publikacjach (Location) | używane wewnętrznie do poprawnego dopasowania notatek/zaznaczeń/zakładek |
-| Pola formularzy w zeszytach (InputField) | np. wypełnione pola w publikacjach typu „zeszyt"; przy różnicy zostaje wartość z najnowszego backupu |
-| Playlisty (PlaylistItem, znaczniki, multimedia) | razem z plikami obrazów i nagrań ze wszystkich backupów |
+| **Notes** | szukać, filtrować po tagu, zmieniać tytuł i treść, dodawać i usuwać tagi (także nowe), usuwać notatki |
+| **Highlights** | filtrować po kolorze, zmieniać kolor, usuwać zaznaczenia (przypięta notatka zostaje) |
+| **Bookmarks** | zmieniać tytuł i fragment, usuwać zakładki |
+| **Tags** | zmieniać nazwy, usuwać tagi (notatki zostają). Wbudowany tag Ulubione jest chroniony |
+| **Tables** | dla zaawansowanych: dowolna tabela bazy i konsola SQL |
 
-## Usunięte elementy
+Usuwanie dba o spójność bazy. Razem z notatką znikają jej przypisania tagów, a razem z zaznaczeniem jego zakresy. Rekordu, którego używają inne dane (np. miejsca w publikacji z notatkami), nie da się usunąć.
 
-JW Library nie zapisuje informacji o usunięciu. Jeśli usunąłeś notatkę na nowszym urządzeniu, a jest ona w starszym backupie, przy scalaniu by „wróciła”. Dlatego w kroku 2 widzisz listę wszystkiego, co zostanie dodane ze starszych backupów, i możesz odznaczyć to, czego nie chcesz.
+### 3. Zapisz
 
-Elementy oznaczone **„probably deleted”** są w starszym backupie urządzenia, ale brakuje ich w nowszym backupie **tego samego** urządzenia — prawie na pewno zostały tam usunięte, więc domyślnie są odznaczone.
+- **Save .jwlibrary** tworzy nowy plik `RRRR-MM-DD_URZĄDZENIE_edited.jwlibrary` z przeliczonym hashem. Opcja „Set backup modification date to now” ustawia datę kopii na bieżącą.
+- **Discard all changes** cofa wszystko do stanu z otwartego pliku.
+- **Edycja w zewnętrznym programie** (np. DB Browser for SQLite): pobierz bazę przyciskiem **Download userData.db**, edytuj ją, **zamknij edytor**, wgraj bazę przyciskiem **Upload edited userData.db** i zapisz.
 
-## Jak działają konflikty notatek
+---
 
-Konflikt to sytuacja, w której **ta sama notatka** (ten sam wewnętrzny identyfikator) ma **inny tytuł lub inną treść** w dwóch backupach — czyli np. edytowałeś tę samą notatkę na telefonie i na tablecie, w różny sposób.
+## Jak działa scalanie
 
-W takim przypadku aplikacja **nie usuwa żadnej wersji**:
+| Dane | Jak są łączone |
+|---|---|
+| **Notatki** | po wewnętrznym identyfikatorze; przy różnej treści patrz [Konflikty notatek](#konflikty-notatek) |
+| **Zaznaczenia** (wraz z zakresami) | po wewnętrznym identyfikatorze zaznaczenia |
+| **Zakładki** | publikacja ma 10 slotów; gdy slot jest zajęty, zakładka trafia do wolnego slotu tej publikacji |
+| **Tagi** i ich przypisania | tag o tej samej nazwie nie jest duplikowany; przypisania do notatek, miejsc (Ulubione) i playlist są przenoszone |
+| **Pola w zeszytach** | przy różnicy zostaje wartość z najnowszej kopii |
+| **Playlisty** | razem ze znacznikami oraz plikami obrazów i nagrań ze wszystkich kopii |
+| **Miejsca w publikacjach** | dopasowywane po publikacji, rozdziale, języku itd., bo każde urządzenie numeruje je inaczej |
+
+### Usunięte elementy
+
+JW Library nie zapisuje informacji o usunięciu. Notatka usunięta na nowszym urządzeniu, która została w starszej kopii, przy scalaniu by „wróciła”. Dlatego w kroku 2 możesz odznaczyć każdy element dodawany ze starszych kopii.
+
+Elementy oznaczone na pomarańczowo jako **probably deleted** są w starszej kopii urządzenia, ale brakuje ich w nowszej kopii **tego samego urządzenia**. Prawie na pewno zostały tam usunięte, więc są **domyślnie odznaczone**. Elementy z innych urządzeń są domyślnie zaznaczone.
+
+### Konflikty notatek
+
+Konflikt to ta sama notatka z **innym tytułem lub treścią** w kopiach z różnych urządzeń. Aplikacja **nie usuwa żadnej wersji**:
 
 1. Wersja **edytowana najpóźniej** (według daty zmiany samej notatki) zostaje jako właściwa notatka.
-2. Druga wersja jest dodawana jako **osobna, nowa notatka**, z tytułem poprzedzonym `[Older version]`.
-3. Możesz później otworzyć obie notatki w JW Library, porównać je i ręcznie scalić lub usunąć tę, która jest zbędna.
+2. Druga wersja jest dodawana jako osobna notatka z tytułem zaczynającym się od **`[Older version]`**.
+3. Później możesz porównać obie wersje i usunąć zbędną, w JW Library albo w zakładce **Edit backup**: wpisz w wyszukiwarce „Older version”.
 
-Konflikty są widoczne w tabeli już na etapie analizy (krok 2), zanim jeszcze pobierzesz scalony plik.
+Wcześniejsza wersja notatki z **tego samego** urządzenia nie jest konfliktem, tylko starszym stanem, i jest pomijana.
 
-## Ostrzeżenia, na które warto zwrócić uwagę
+### Ostrzeżenia
 
-Aplikacja pokazuje w logu ostrzeżenia (żółte/pomarańczowe wpisy), jeśli:
+| Ostrzeżenie | Co oznacza |
+|---|---|
+| *file(s) were loaded twice* | ten sam plik wczytano dwa razy, więc zostanie użyty raz |
+| *date in manifest.json is missing or invalid* | datę kopii ustalono z bazy albo z daty pliku; sprawdź w logu, czy kolejność kopii jest właściwa |
+| *different JW Library versions (schema …)* | kopie pochodzą z różnych wersji aplikacji; najlepiej zaktualizować JW Library na wszystkich urządzeniach i zrobić świeże kopie |
+| *record(s) could not be copied* / *integrity check* | część danych nie dała się przenieść albo baza ma problem; sprawdź wynik przed przywróceniem |
+| *all 10 slots … were taken* | zakładka ze starszej kopii nie zmieściła się w publikacji i została pominięta |
 
-- **Data w manifeście jednego z plików jest brakująca lub niepoprawna** — aplikacja wtedy sama próbuje ustalić datę na podstawie zawartości bazy albo daty modyfikacji samego pliku, żeby nie pomylić kolejności „starszy → nowszy".
-- **Backupy mają różne wersje schematu bazy** (`schemaVersion` w manifeście) — pliki pochodzą z różnych wersji JW Library. Najlepiej zaktualizować aplikację na wszystkich urządzeniach i zrobić świeże backupy.
-- **Nie udało się skopiować części rekordów albo kontrola spójności wykryła problem** — plik i tak zostanie utworzony, ale ekran końcowy pokaże ostrzeżenie: zweryfikuj wynik przed zaimportowaniem go i usunięciem oryginałów.
-- **Zakładka nie zmieściła się** — publikacja ma tylko 10 slotów; jeśli wszystkie są zajęte, zakładka ze starszego backupu jest pomijana.
+---
 
-## Bezpieczeństwo i prywatność
+## Co zrobić, gdy…
 
-- Całe przetwarzanie (rozpakowywanie, odczyt bazy SQLite, scalanie, pakowanie) odbywa się **lokalnie w przeglądarce** — pliki nie są przesyłane na żaden serwer.
-- Oryginalne pliki `.jwlibrary` **nie są modyfikowane** — powstaje zupełnie nowy plik wynikowy.
-- Jedyny ruch sieciowy to jednorazowe wczytanie bibliotek `sql.js` i `JSZip` z CDN przy pierwszym otwarciu strony.
+**…na telefonie pliku `.jwlibrary` nie da się wybrać (jest wyszarzony).**
+Upewnij się, że używasz aktualnej wersji aplikacji: otwórz ją z internetem i, jeśli trzeba, zamknij i otwórz ponownie. Obecna wersja przyjmuje każdy plik i sama sprawdza, czy to kopia JW Library.
+
+**…pole pokazuje „Could not open…”.**
+Plik jest uszkodzony albo to nie kopia JW Library, np. niepełne pobieranie. Utwórz kopię w JW Library jeszcze raz i wczytaj nowy plik.
+
+**…na Androidzie nie ma przycisku „Share…”.**
+Tak ma być, bo Chrome na Androidzie nie pozwala stronom udostępniać plików `.jwlibrary`. Użyj **Download**, a potem wybierz plik z folderu **Pobrane** (szczegóły w [kroku 4](#4-przywrócenie-w-jw-library)).
+
+**…po scaleniu wróciły notatki, które usunąłem.**
+Scal jeszcze raz z oryginalnych kopii i w kroku 2 odznacz te elementy. Możesz też usunąć je w zakładce **Edit backup** w gotowym pliku.
+
+**…pojawiły się notatki „[Older version] …”.**
+To drugie wersje notatek edytowanych na dwóch urządzeniach. Porównaj je z właściwymi notatkami i usuń zbędne.
+
+**…JW Library nie chce przywrócić pliku.**
+Najczęściej kopia pochodzi z nowszej wersji JW Library niż ta, w której ją przywracasz. Zaktualizuj JW Library. Jeśli przy scalaniu pojawiło się ostrzeżenie o wersjach schematu, zrób świeże kopie na zaktualizowanych urządzeniach i scal ponownie.
+
+**…kopie są w złej kolejności.**
+Kolejność wynika z dat w kopiach. Sprawdź log w kroku 2. Jeśli któraś kopia ma błędną datę, aplikacja to zgłosi, a najlepiej utworzyć tę kopię ponownie.
+
+**…aplikacja pokazuje starą wersję.**
+Odśwież stronę z pominięciem pamięci podręcznej (komputer: **Ctrl+F5**, Mac: **Cmd+Shift+R**). Zainstalowaną aplikację zamknij i otwórz ponownie, mając włączony internet.
+
+---
+
+## Prywatność i bezpieczeństwo
+
+- Rozpakowywanie, odczyt bazy, scalanie, edycja i pakowanie odbywają się **wyłącznie w przeglądarce**. Pliki nie są nigdzie wysyłane.
+- Oryginalne pliki **nie są modyfikowane**: zawsze powstaje nowy plik wynikowy.
+- Aplikacja nie używa ciasteczek, kont ani analityki. Biblioteki są częścią aplikacji. Z internetu, z CDN, pobierane są tylko wtedy, gdy otwierasz sam plik `index.html` bez folderu `vendor/`.
+- W repozytorium nigdy nie zapisuj swoich kopii; plik `.gitignore` blokuje pliki `.jwlibrary` i `.db`.
+
+---
 
 ## Dobre praktyki
 
-- Zachowaj oryginalne pliki `.jwlibrary` do momentu, aż sprawdzisz, że scalony plik działa poprawnie po imporcie.
-- Po imporcie porównaj w JW Library liczbę notatek/zaznaczeń z podsumowaniem, które aplikacja wyświetliła po scaleniu.
-- Jeśli scalasz więcej niż dwa backupy naraz, zrób to w jednej sesji (bez odświeżania strony) — kliknięcie **„Merge more files"** czyści dane z pamięci i pozwala zacząć od nowa z nowym zestawem plików.
-- Przy dużych bibliotekach (tysiące zaznaczeń/notatek) analiza i scalanie mogą potrwać dłużej — nie zamykaj karty w trakcie.
+- **Rób kopie regularnie** i przechowuj je poza telefonem, np. na Dysku Google i na komputerze. Nazwy plików z datą i urządzeniem (np. `2026-11-18_telefon.jwlibrary`) ułatwiają porządek.
+- **Przed scaleniem** zapisz oryginały wszystkich kopii. Usuń je dopiero, gdy sprawdzisz wynik.
+- **Po przywróceniu** porównaj w JW Library liczbę notatek i zaznaczeń z podsumowaniem z aplikacji.
+- **Scalaj świeże kopie** zrobione tuż przed scaleniem na wszystkich urządzeniach.
+- **Przy dużych bibliotekach** (tysiące notatek) analiza może potrwać dłużej, więc nie zamykaj karty w trakcie.
 
-## Edycja pojedynczego backupu (zakładka „Edit backup”)
+---
 
-Zakładka **Edit backup** w nagłówku aplikacji zastępuje dawny skrypt `jwlibrary_tools.py`. Otwierasz w niej jeden plik `.jwlibrary` i możesz:
+## Dla programistów
 
-- przeglądać, wyszukiwać, edytować i usuwać **notatki** (także ich tagi), **zaznaczenia** (zmiana koloru), **zakładki** i **tagi**,
-- w trybie **Tables** edytować dowolną tabelę bazy albo uruchomić własne zapytanie SQL,
-- pobrać `userData.db`, zmienić go w zewnętrznym edytorze SQLite i wgrać z powrotem,
-- zapisać wynik jako nowy plik `.jwlibrary` — hash w `manifest.json` jest przeliczany automatycznie.
+### Struktura plików
 
-Usuwanie dba o spójność bazy: razem z notatką znikają jej przypisania tagów, a razem z zaznaczeniem jego zakresy (notatka zostaje). Rekordu, którego używają inne dane, nie da się usunąć. Wszystkie zmiany można cofnąć przyciskiem **Discard all changes**, dopóki nie zapiszesz pliku.
+| Plik | Rola |
+|---|---|
+| `index.html` | cała aplikacja (HTML, CSS, JavaScript) |
+| `sw.js` | service worker: działanie offline; **zwiększ `VERSION`** po zmianie plików w `vendor/` lub `icons/` |
+| `manifest.webmanifest`, `icons/` | instalacja jako aplikacja (PWA) |
+| `vendor/` | [sql.js](https://github.com/sql-js/sql.js) 1.10.2 (licencja MIT) i [JSZip](https://github.com/Stuk/jszip) 3.10.1 (licencja MIT lub GPLv3), z plikami licencji |
+
+### Uruchomienie lokalne
+
+Service worker i lokalne biblioteki wymagają serwera HTTP:
+
+```bash
+python3 -m http.server 8000
+```
+
+Następnie otwórz http://localhost:8000/.
+
+### Publikacja
+
+Strona jest publikowana przez **GitHub Pages** z gałęzi `main` (folder główny). Każda zmiana scalona do `main` trafia na stronę w ciągu 1–2 minut.
+
+### Format pliku `.jwlibrary`
+
+To archiwum ZIP z plikami:
+- `manifest.json`, w którym `userDataBackup.hash` to SHA-256 bazy;
+- `userData.db`, czyli baza SQLite;
+- opcjonalnie pliki multimediów z playlist.
