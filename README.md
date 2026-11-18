@@ -73,7 +73,7 @@ Aplikacja wykonuje **próbne scalenie**, więc liczby w podsumowaniu to dokładn
 
 ### 3. Scalenie: „Merge & download”
 
-Aplikacja tworzy plik `RRRR-MM-DD_MERGED.jwlibrary`, sprawdza spójność bazy i pokazuje przycisk **Download merged file**. Jeśli kontrola coś wykryje, na ekranie końcowym pojawi się żółte ostrzeżenie.
+Aplikacja tworzy plik `RRRR-MM-DD_MERGED_URZĄDZENIA.jwlibrary` (np. `2026-11-18_MERGED_PHONE+TABLET.jwlibrary`), sprawdza spójność bazy i pokazuje przycisk **Download merged file**. Jeśli kontrola coś wykryje, na ekranie końcowym pojawi się żółte ostrzeżenie.
 
 ### 4. Przywrócenie w JW Library
 
@@ -150,10 +150,10 @@ Wcześniejsza wersja notatki z **tego samego** urządzenia nie jest konfliktem, 
 
 | Ostrzeżenie | Co oznacza |
 |---|---|
-| *file(s) were loaded twice* | ten sam plik wczytano dwa razy, więc zostanie użyty raz |
+| *…loaded twice and will be used only once* | ten sam plik wczytano dwa razy, więc zostanie użyty raz |
 | *date in manifest.json is missing or invalid* | datę kopii ustalono z bazy albo z daty pliku; sprawdź w logu, czy kolejność kopii jest właściwa |
 | *different JW Library versions (schema …)* | kopie pochodzą z różnych wersji aplikacji; najlepiej zaktualizować JW Library na wszystkich urządzeniach i zrobić świeże kopie |
-| *record(s) could not be copied* / *integrity check* | część danych nie dała się przenieść albo baza ma problem; sprawdź wynik przed przywróceniem |
+| *…could not be copied* / *integrity check* | część danych nie dała się przenieść albo baza ma problem; sprawdź wynik przed przywróceniem |
 | *all 10 slots … were taken* | zakładka ze starszej kopii nie zmieściła się w publikacji i została pominięta |
 
 ---
