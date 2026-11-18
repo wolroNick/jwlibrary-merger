@@ -4,8 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JW Library Merger</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<meta name="description" content="Merge and edit JW Library backups (.jwlibrary) in your browser. Files never leave your device.">
+<meta name="theme-color" content="#18794e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="JWL Merger">
+<!-- Libraries ship with the app (vendor/) so it works offline. If only this page was
+     downloaded on its own, they are loaded from the CDN instead. -->
+<script src="vendor/sql-wasm.js"></script>
+<script>window.initSqlJs || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.min.js"><\/script>');</script>
+<script src="vendor/jszip.min.js"></script>
+<script>window.JSZip || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"><\/script>');</script>
 <style>
   :root {
     --bg: #f4f4f5;
@@ -96,6 +108,7 @@
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  button, .btn, label, .item, .drop-zone { -webkit-tap-highlight-color: transparent; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: var(--bg);
@@ -702,6 +715,20 @@
   }
   .color-pick button.sel { border-color: var(--text); }
   .file-btn { position: relative; overflow: hidden; }
+  #installBtn { margin-left: auto; }
+  #installBtn + .tabs { margin-left: 0.5rem; }
+
+  /* Touch screens: bigger targets, 16px inputs (stops iOS from zooming in on focus) */
+  @media (pointer: coarse) {
+    .btn { min-height: 44px; }
+    .btn-sm { min-height: 38px; padding: 0.45rem 0.8rem; font-size: 0.8rem; }
+    .input, textarea.input { font-size: 16px; }
+    .tab { padding: 0.55rem 0.9rem; }
+    .pick-row { padding: 0.65rem 0.75rem; }
+    .pick-row input, label input[type=checkbox] { width: 20px; height: 20px; }
+    .remove-btn { font-size: 1.25rem; padding: 6px 9px; }
+    .drop-zone { padding: 1.5rem 1rem; }
+  }
   .file-btn input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 </style>
 </head>
@@ -711,6 +738,7 @@
   <div class="header-icon">📚</div>
   <h1>JW Library Merger</h1>
   <span class="chip">.jwlibrary</span>
+  <button class="btn btn-secondary btn-sm hidden" id="installBtn" title="Install as an app">&#8681; Install</button>
   <nav class="tabs">
     <button class="tab active" id="tabMerge" onclick="showView('merge')">Merge</button>
     <button class="tab" id="tabEdit" onclick="showView('edit')">Edit backup</button>
@@ -800,11 +828,13 @@
     <div class="alert alert-info" id="doneMsg"></div>
     <div class="actions">
       <a class="btn btn-download" id="downloadLink" download>&#8659; Download merged file</a>
+      <button class="btn btn-secondary hidden" id="shareBtn">&#8679; Share…</button>
       <button class="btn btn-secondary" onclick="reset()">Merge more files</button>
     </div>
     <hr>
     <div style="font-size:0.8rem; color:var(--text3); line-height:1.7;">
-      To restore: open JW Library &rarr; Settings &rarr; Backup and restore &rarr; Restore, and select the merged file.
+      To restore: open JW Library &rarr; Settings &rarr; Backup and restore &rarr; Restore, and select the merged file.<br>
+      On a phone you can also tap <b>Share…</b> and choose JW Library (if offered), or save the file to Google Drive first.
     </div>
   </div>
 
@@ -823,7 +853,7 @@
       </div>
     </div>
     <div class="drop-zone" id="edDrop">
-      <input type="file" accept=".jwlibrary" onchange="edLoad(this.files[0])">
+      <input type="file" onchange="edLoad(this.files[0])">
       <span class="drop-icon">&#128194;</span>
       <div class="drop-label">Backup to edit</div>
       <div class="drop-hint">drop or click to browse</div>
@@ -901,6 +931,7 @@
     <div class="actions">
       <button class="btn btn-primary" onclick="edSave()">Save .jwlibrary</button>
       <a class="btn btn-download hidden" id="edDownload" download>&#8659; Download</a>
+      <button class="btn btn-secondary hidden" id="edShareBtn">&#8679; Share…</button>
     </div>
     <hr>
     <div class="small" style="color:var(--text2); line-height:1.7; margin-bottom:0.5rem;">
@@ -928,7 +959,10 @@ let mergeUrl = null;
 const MAX_SLOTS = 6;
 
 // Shared promise: every loader awaits it, so picking a file before sql.js is ready no longer crashes.
-const sqlReady = initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` })
+// The WebAssembly part can't be fetched from a local file (file://), so then it comes from the CDN.
+const SQL_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/';
+const sqlReady = initSqlJs({ locateFile: f => (location.protocol === 'file:' ? SQL_CDN : 'vendor/') + f })
+  .catch(() => initSqlJs({ locateFile: f => SQL_CDN + f }))
   .then(s => (SQL = s));
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1015,7 +1049,7 @@ function removeFile(idx) {
 }
 
 function emptySlotInner(i, err) {
-  return `<input type="file" accept=".jwlibrary" onchange="loadFile(${i}, this.files[0])">
+  return `<input type="file" onchange="loadFile(${i}, this.files[0])">
     <span class="drop-icon">${err ? '&#9888;' : '&#128194;'}</span>
     <div class="drop-label${err ? ' err-text' : ''}">${err ? `Could not open ${escHtml(err.name)}` : `Backup ${i + 1}`}</div>
     <div class="drop-hint">${err ? `${escHtml(err.error)} — click to choose another file` : 'drop or click to browse'}</div>`;
@@ -1601,6 +1635,7 @@ async function doMerge() {
   const link = document.getElementById('downloadLink');
   link.href = mergeUrl;
   link.download = fname;
+  setupShare('shareBtn', blob, fname);
 
   const a = r.added;
   const parts = [`${a.notes} notes`, `${a.marks} highlights`, `${a.bookmarks} bookmarks`, `${a.tags} tags`];
@@ -1740,6 +1775,7 @@ function edSetDirty(v = true) {
   ed.dirty = v;
   document.getElementById('edDirtyInfo').textContent = v ? 'Unsaved changes' : 'No changes yet';
   document.getElementById('edDownload').classList.add('hidden');
+  document.getElementById('edShareBtn').classList.add('hidden');
 }
 
 // ── load ────────────────────────────────────────────────────────────────────
@@ -1776,7 +1812,7 @@ async function edLoad(file) {
     ed = null;
     document.getElementById('edStep2').classList.add('hidden');
     document.getElementById('edStep3').classList.add('hidden');
-    drop.innerHTML = `<input type="file" accept=".jwlibrary" onchange="edLoad(this.files[0])">
+    drop.innerHTML = `<input type="file" onchange="edLoad(this.files[0])">
       <span class="drop-icon">&#9888;</span>
       <div class="drop-label err-text">Could not open ${escHtml(file.name)}</div>
       <div class="drop-hint">${escHtml(e.message)} — click to choose another file</div>`;
@@ -1789,7 +1825,7 @@ function edRenderInfo() {
   const s = getStats(ed.db);
   drop.classList.add('loaded');
   drop.innerHTML = `
-    <input type="file" accept=".jwlibrary" onchange="edLoad(this.files[0])">
+    <input type="file" onchange="edLoad(this.files[0])">
     <div class="file-name">${escHtml(ed.file.name)}</div>
     <div class="file-stats" style="justify-content:center;">
       <span class="stat-pill">${s.Note} notes</span>
@@ -2457,9 +2493,9 @@ async function edSave() {
     out.file('userData.db', dbBytes);
     const blob = await out.generateAsync({ type: 'blob', compression: 'DEFLATE' });
     const name = `${new Date().toISOString().slice(0, 10)}_${safeFileName(manifest.userDataBackup.deviceName)}_edited.jwlibrary`;
-    offerDownload(blob, name);
     edSetDirty(false);
-    document.getElementById('edDownload').classList.remove('hidden');
+    offerDownload(blob, name);
+    setupShare('edShareBtn', blob, name);
     edMsg(`Saved. Hash updated: <code>${escHtml(oldHash.slice(0, 12) || '—')}…</code> &rarr; <code>${hash.slice(0, 12)}…</code><br>
       To restore: JW Library &rarr; Settings &rarr; Backup and restore &rarr; Restore. Keep your original file until you have checked the result.`);
   } catch (e) {
@@ -2510,6 +2546,51 @@ function edDiscard() {
 window.addEventListener('beforeunload', e => {
   if (ed?.dirty) { e.preventDefault(); e.returnValue = ''; }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHONE SUPPORT: share sheet, install, offline
+// ═══════════════════════════════════════════════════════════════════════════
+// The share sheet lets a phone send the file straight to another app (JW Library,
+// Google Drive…). Browsers only allow it for some file types, so the button
+// appears only where it works; "Download" is always there.
+function shareableFile(blob, name) {
+  for (const type of ['application/octet-stream', 'application/zip', '']) {
+    const f = new File([blob], name, type ? { type } : {});
+    try { if (navigator.canShare?.({ files: [f] })) return f; } catch (_) {}
+  }
+  return null;
+}
+function setupShare(btnId, blob, name) {
+  const btn = document.getElementById(btnId);
+  const file = shareableFile(blob, name);
+  btn.classList.toggle('hidden', !file);
+  btn.onclick = async () => {
+    try { await navigator.share({ files: [file], title: name }); }
+    catch (e) { if (e.name !== 'AbortError') alert(`Sharing didn’t work (${e.message}). Use “Download” instead.`); }
+  };
+}
+
+// "Install" button where the browser supports it (Chrome, Edge, Android).
+// On iPhone/iPad: Safari → Share → Add to Home Screen.
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  installPrompt = e;
+  document.getElementById('installBtn').classList.remove('hidden');
+});
+document.getElementById('installBtn').onclick = async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => {});
+  installPrompt = null;
+  document.getElementById('installBtn').classList.add('hidden');
+};
+window.addEventListener('appinstalled', () => document.getElementById('installBtn').classList.add('hidden'));
+
+// Offline support — only when served from a website (not when opened as a local file).
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(e => console.warn('Service worker:', e)));
+}
 
 // Drag and drop: a file dropped on a slot goes into that slot; several files fill the free slots.
 const clearDragOver = () => document.querySelectorAll('.drop-zone.drag-over').forEach(el => el.classList.remove('drag-over'));

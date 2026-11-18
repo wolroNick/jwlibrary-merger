@@ -1,24 +1,40 @@
 # JW Library Merger — README
 
-Aplikacja webowa (jeden plik HTML) do **scalania dwóch lub więcej kopii zapasowych `.jwlibrary`** — np. backupu z telefonu i z tabletu — w jeden plik, bez utraty notatek, zaznaczeń, zakładek i tagów z żadnego z urządzeń.
+Aplikacja webowa do **scalania dwóch lub więcej kopii zapasowych `.jwlibrary`** — np. backupu z telefonu i z tabletu — w jeden plik, bez utraty notatek, zaznaczeń, zakładek i tagów z żadnego z urządzeń. Pozwala też **edytować pojedynczy backup** (zakładka „Edit backup”). Działa na komputerze i na telefonie.
 
 Cały proces działa **lokalnie w przeglądarce**. Żaden plik ani żadne dane nie są wysyłane na jakikolwiek serwer.
+
+**Otwórz aplikację:** https://wolronick.github.io/jwlibrary-merger/
 
 ---
 
 ## Wymagania
 
-- Nowoczesna przeglądarka (Chrome, Firefox, Edge lub Safari) z włączonym JavaScriptem.
-- Jednorazowe połączenie z internetem — przy pierwszym otwarciu strona wczytuje z CDN dwie biblioteki: `sql.js` (obsługa bazy SQLite w przeglądarce) i `JSZip` (rozpakowywanie/pakowanie plików `.jwlibrary`, które są zwykłymi archiwami ZIP).
-- Pliki `.jwlibrary`, które chcesz scalić (co najmniej dwa).
+- Nowoczesna przeglądarka (Chrome, Firefox, Edge lub Safari) z włączonym JavaScriptem — na komputerze albo na telefonie.
+- Pliki `.jwlibrary`, które chcesz scalić (co najmniej dwa) albo edytować.
 
 ## Jak uruchomić
 
-Nie trzeba niczego instalować. Wystarczy otworzyć plik `jwlibrary-merger.html`:
+### Z internetu (zalecane)
 
-- dwuklik na plik, albo
-- przeciągnięcie pliku do okna otwartej przeglądarki, albo
-- kliknięcie prawym przyciskiem → „Otwórz za pomocą" → wybrana przeglądarka.
+Otwórz https://wolronick.github.io/jwlibrary-merger/ — zawsze najnowsza wersja. Po pierwszym otwarciu strona działa także **bez internetu**.
+
+### Jako aplikacja na telefonie lub komputerze
+
+- **Android (Chrome):** otwórz stronę → menu ⋮ → **„Zainstaluj aplikację”** (albo **„Dodaj do ekranu głównego”**). Możesz też kliknąć przycisk **Install** w nagłówku, jeśli się pojawi.
+- **iPhone / iPad (Safari):** otwórz stronę → przycisk **Udostępnij** → **„Do ekranu początkowego”**.
+- **Komputer (Chrome / Edge):** ikona instalacji na pasku adresu albo przycisk **Install** w nagłówku.
+
+Ikona „JWL Merger” pojawi się obok innych aplikacji, a aplikacja otworzy się w osobnym oknie i zadziała offline.
+
+### Z pliku na dysku
+
+Pobierz repozytorium (**Code → Download ZIP**), rozpakuj i otwórz `index.html` dwuklikiem. Działa też sam plik `index.html` — wtedy przy otwarciu potrzebny jest internet, bo biblioteki `sql.js` i `JSZip` są wczytywane z CDN zamiast z folderu `vendor/`.
+
+### Na telefonie — wybór i zapis plików
+
+- Pliki `.jwlibrary` wybierasz z „Pobranych”, Dysku Google, iCloud itp. — aplikacja sama sprawdza, czy plik jest poprawnym backupem.
+- Gotowy plik pobierasz przyciskiem **Download**. Jeśli przeglądarka pozwala, pojawi się też **Share…** — otwiera systemowe menu udostępniania (np. zapis na Dysku Google albo wysłanie do JW Library). Na Androidzie Chrome zwykle nie pozwala udostępniać plików `.jwlibrary`, więc tam użyj **Download**, a potem w JW Library wybierz plik z folderu „Pobrane”.
 
 ## Krok po kroku
 
