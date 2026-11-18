@@ -101,6 +101,13 @@ Aplikacja pokazuje w logu ostrzeżenia (żółte/pomarańczowe wpisy), jeśli:
 - Jeśli scalasz więcej niż dwa backupy naraz, zrób to w jednej sesji (bez odświeżania strony) — kliknięcie **„Merge more files"** czyści dane z pamięci i pozwala zacząć od nowa z nowym zestawem plików.
 - Przy dużych bibliotekach (tysiące zaznaczeń/notatek) analiza i scalanie mogą potrwać dłużej — nie zamykaj karty w trakcie.
 
-## Narzędzie towarzyszące
+## Edycja pojedynczego backupu (zakładka „Edit backup”)
 
-Do **ręcznej, precyzyjnej edycji jednego backupu** (np. usunięcie konkretnego wpisu, poprawka w bazie) służy skrypt `jwlibrary_tools.py` (linia komend, Python 3) — pozwala rozpakować plik `.jwlibrary`, edytować `userData.db` bezpośrednio w edytorze SQLite, a następnie spakować go z powrotem z automatycznie przeliczonym hashem. Zobacz dokumentację w nagłówku tego skryptu.
+Zakładka **Edit backup** w nagłówku aplikacji zastępuje dawny skrypt `jwlibrary_tools.py`. Otwierasz w niej jeden plik `.jwlibrary` i możesz:
+
+- przeglądać, wyszukiwać, edytować i usuwać **notatki** (także ich tagi), **zaznaczenia** (zmiana koloru), **zakładki** i **tagi**,
+- w trybie **Tables** edytować dowolną tabelę bazy albo uruchomić własne zapytanie SQL,
+- pobrać `userData.db`, zmienić go w zewnętrznym edytorze SQLite i wgrać z powrotem,
+- zapisać wynik jako nowy plik `.jwlibrary` — hash w `manifest.json` jest przeliczany automatycznie.
+
+Usuwanie dba o spójność bazy: razem z notatką znikają jej przypisania tagów, a razem z zaznaczeniem jego zakresy (notatka zostaje). Rekordu, którego używają inne dane, nie da się usunąć. Wszystkie zmiany można cofnąć przyciskiem **Discard all changes**, dopóki nie zapiszesz pliku.

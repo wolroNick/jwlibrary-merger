@@ -640,6 +640,46 @@
   .field-head label { color: var(--text2); font-weight: 600; }
   .field .input { width: 100%; }
   details summary { cursor: pointer; font-size: 0.85rem; color: var(--text2); font-weight: 500; }
+  .seg { margin: 0 0 1rem; display: flex; flex-wrap: wrap; width: 100%; }
+  .seg .tab { flex: 1 0 auto; }
+  .item {
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    border-radius: var(--radius);
+    padding: 0.75rem 0.9rem;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .item:hover { border-color: var(--border2); }
+  .item.editing { cursor: default; border-color: var(--accent-mid); background: var(--surface); }
+  .item-head { display: flex; align-items: center; gap: 0.5rem; }
+  .item-title { font-weight: 600; font-size: 0.88rem; word-break: break-word; }
+  .item-meta { font-size: 0.72rem; color: var(--text3); margin-top: 0.2rem; font-family: 'SF Mono', 'Fira Code', monospace; }
+  .item-body {
+    font-size: 0.8rem; color: var(--text2); margin-top: 0.35rem; line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    white-space: pre-line; word-break: break-word;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem; }
+  .chip-tag {
+    font-size: 0.68rem; padding: 1px 8px; border-radius: 20px;
+    background: var(--accent-light); color: var(--accent); border: 1px solid var(--accent-mid);
+  }
+  label.chip-toggle {
+    font-size: 0.75rem; padding: 3px 10px; border-radius: 20px; cursor: pointer;
+    border: 1px solid var(--border2); color: var(--text2); background: var(--surface2);
+    display: inline-flex; align-items: center; gap: 0.3rem;
+  }
+  label.chip-toggle:has(input:checked) { background: var(--accent-light); color: var(--accent); border-color: var(--accent-mid); }
+  label.chip-toggle input { display: none; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; display: inline-block; border: 1px solid rgba(0,0,0,0.15); }
+  .color-pick { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .color-pick button {
+    width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent; outline: 1px solid var(--border2);
+  }
+  .color-pick button.sel { border-color: var(--text); }
   .file-btn { position: relative; overflow: hidden; }
   .file-btn input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 </style>
@@ -771,9 +811,28 @@
       <div class="step-num">2</div>
       <div>
         <div class="step-title">Browse &amp; edit</div>
-        <div class="step-sub">Click a row to edit it. Changes stay in memory until you save.</div>
+        <div class="step-sub">Tap an item to edit it. Changes stay in memory until you save.</div>
       </div>
     </div>
+    <div class="tabs seg" id="edModes">
+      <button class="tab active" data-mode="notes" onclick="edSetMode('notes')">Notes</button>
+      <button class="tab" data-mode="marks" onclick="edSetMode('marks')">Highlights</button>
+      <button class="tab" data-mode="bookmarks" onclick="edSetMode('bookmarks')">Bookmarks</button>
+      <button class="tab" data-mode="tags" onclick="edSetMode('tags')">Tags</button>
+      <button class="tab" data-mode="tables" onclick="edSetMode('tables')">Tables</button>
+    </div>
+
+    <div id="edFriendly">
+      <div class="toolbar">
+        <input class="input grow" id="edFind" type="search" placeholder="Search…" oninput="edFindChanged()">
+        <select class="input" id="edFilter" onchange="edList.shown = LIST_STEP; edRenderList()"></select>
+      </div>
+      <div class="small muted" id="edListInfo" style="margin-bottom:0.5rem;"></div>
+      <div id="edList"></div>
+    </div>
+
+    <div id="edTablesMode" class="hidden">
+    <div class="small muted" style="margin-bottom:0.75rem;">Raw database tables — for advanced edits.</div>
     <div class="toolbar">
       <select class="input" id="edTable" onchange="edSelectTable(this.value)"></select>
       <input class="input grow" id="edSearch" type="search" placeholder="Search in this table…" oninput="edSearchChanged()">
@@ -798,6 +857,7 @@
         <div id="edSqlResult" style="overflow-x:auto;"></div>
       </div>
     </details>
+    </div>
   </div>
 
   <!-- E3: Save -->
@@ -1598,9 +1658,9 @@ async function edLoad(file) {
     ed = { file, zip, manifest, origBytes, db, dirty: false, wasWal,
            hashOk: storedHash.toLowerCase() === actualHash };
     edRenderInfo();
-    edFillTables();
     edSetDirty(false);
     edMsg('');
+    edSetMode(edMode);
     document.getElementById('edStep2').classList.remove('hidden');
     document.getElementById('edStep3').classList.remove('hidden');
   } catch (e) {
@@ -1799,7 +1859,7 @@ function edSaveRow(i) {
   try {
     ed.db.run(`UPDATE "${edView.table}" SET ${sets.join(', ')} WHERE ${w.sql}`, [...params, ...w.params]);
     edSetDirty();
-    edRenderTable();
+    edRefresh();
   } catch (e) {
     document.getElementById('edRowErr').innerHTML = `<div class="alert alert-err">${escHtml(e.message)}</div>`;
   }
@@ -1815,13 +1875,13 @@ const CASCADE = {
 };
 
 // Any other table that still points at this row → refuse, instead of leaving broken links.
-function findReferences(db, table, row) {
+function findReferences(db, table, row, pkCol) {
   const refs = [];
   const tables = q(db, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").map(r => r.name);
   for (const t of tables) {
     for (const fk of q(db, `PRAGMA foreign_key_list("${t}")`)) {
       if (fk.table !== table) continue;
-      const target = fk.to || edView.pkCols[0];
+      const target = fk.to || pkCol;
       const v = row[target];
       if (v === null || v === undefined) continue;
       const n = q1(db, `SELECT COUNT(*) FROM "${t}" WHERE "${fk.from}" = ?`, [v]);
@@ -1835,26 +1895,35 @@ function describeRow(row) {
   return row.Title || row.Name || row.Label || row.Value || row.UserMarkGuid || row.Guid || '';
 }
 
+// Deletes one row plus its safe dependants in a single transaction.
+function deleteWithCascade(table, pkCols, row) {
+  const id = row[pkCols[0]];
+  const where = pkCols.map(c => `"${c}" = ?`).join(' AND ');
+  ed.db.run('BEGIN');
+  try {
+    for (const [sql, p] of (CASCADE[table]?.(id) || [])) {
+      if (tableExists(ed.db, sql.match(/(?:FROM|UPDATE) (\w+)/)[1])) ed.db.run(sql, p);
+    }
+    const refs = findReferences(ed.db, table, row, pkCols[0]);
+    if (refs.length) throw new Error(`Still used by: ${refs.join(', ')}. Delete those first.`);
+    ed.db.run(`DELETE FROM "${table}" WHERE ${where}`, pkCols.map(c => row[c]));
+    ed.db.run('COMMIT');
+  } catch (e) {
+    try { ed.db.run('ROLLBACK'); } catch (_) {}
+    throw e;
+  }
+}
+
 function edDeleteRow(i) {
   const row = edView.rows[i];
   const { table } = edView;
   const label = describeRow(row);
   if (!confirm(`Delete this row from ${table}?${label ? `\n\n“${String(label).slice(0, 80)}”` : ''}`)) return;
-  const id = row[edView.pkCols[0]];
-  const w = pkWhere(row);
   try {
-    ed.db.run('BEGIN');
-    for (const [sql, p] of (CASCADE[table]?.(id) || [])) {
-      if (tableExists(ed.db, sql.match(/(?:FROM|UPDATE) (\w+)/)[1])) ed.db.run(sql, p);
-    }
-    const refs = findReferences(ed.db, table, row);
-    if (refs.length) throw new Error(`Still used by: ${refs.join(', ')}. Delete those rows first.`);
-    ed.db.run(`DELETE FROM "${table}" WHERE ${w.sql}`, w.params);
-    ed.db.run('COMMIT');
+    deleteWithCascade(table, edView.pkCols, row);
     edSetDirty();
-    edFillTables(table);
+    edRefresh();
   } catch (e) {
-    try { ed.db.run('ROLLBACK'); } catch (_) {}
     alert('Not deleted: ' + e.message);
   }
 }
@@ -1880,7 +1949,7 @@ function edRunSql() {
     }
     html += `<div class="small ok-text" style="margin-top:0.5rem;">&#10003; OK${changes ? ` — ${changes} row(s) changed` : ''}${last ? ` — ${last.values.length} row(s) returned` : ''}</div>`;
     out.innerHTML = html;
-    if (!isRead) edFillTables(edView?.table);
+    if (!isRead) edRefresh();
   } catch (e) {
     out.innerHTML = `<div class="alert alert-err">${escHtml(e.message)}</div>`;
   }
@@ -1888,6 +1957,366 @@ function edRunSql() {
 document.addEventListener('keydown', e => {
   if (e.target.id === 'edSql' && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); edRunSql(); }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FRIENDLY EDITORS: notes / highlights / bookmarks / tags
+// ═══════════════════════════════════════════════════════════════════════════
+const LIST_STEP = 100;
+let edMode = 'notes';
+let edList = { all: [], shown: LIST_STEP };
+
+const BIBLE_BOOKS = ['Genesis','Exodus','Leviticus','Numbers','Deuteronomy','Joshua','Judges','Ruth',
+  '1 Samuel','2 Samuel','1 Kings','2 Kings','1 Chronicles','2 Chronicles','Ezra','Nehemiah','Esther','Job',
+  'Psalms','Proverbs','Ecclesiastes','Song of Solomon','Isaiah','Jeremiah','Lamentations','Ezekiel','Daniel',
+  'Hosea','Joel','Amos','Obadiah','Jonah','Micah','Nahum','Habakkuk','Zephaniah','Haggai','Zechariah','Malachi',
+  'Matthew','Mark','Luke','John','Acts','Romans','1 Corinthians','2 Corinthians','Galatians','Ephesians',
+  'Philippians','Colossians','1 Thessalonians','2 Thessalonians','1 Timothy','2 Timothy','Titus','Philemon',
+  'Hebrews','James','1 Peter','2 Peter','1 John','2 John','3 John','Jude','Revelation'];
+
+// UserMark.ColorIndex → colour shown in JW Library.
+const MARK_COLORS = { 0: 'transparent', 1: '#f7dc4a', 2: '#86d968', 3: '#6ab7f2', 4: '#b393ef', 5: '#f59ac6', 6: '#f7ad55' };
+const MARK_COLOR_NAMES = { 0: 'None', 1: 'Yellow', 2: 'Green', 3: 'Blue', 4: 'Purple', 5: 'Pink', 6: 'Orange' };
+const dot = c => c === undefined || c === null ? '' :
+  `<span class="dot" style="background:${MARK_COLORS[c] ?? '#ccc'}" title="${MARK_COLOR_NAMES[c] ?? c}"></span>`;
+
+function fmtIssue(n) {
+  const s = String(n || '');
+  return s.length === 8 ? `${s.slice(0, 4)}-${s.slice(4, 6)}` : s;
+}
+
+// Human-readable place: "Matthew 5:3 (nwtsty)" or "Article title · w 2023-01 ¶4".
+function locLabel(loc, blockType, block) {
+  if (!loc) return 'No location';
+  let s;
+  if (loc.BookNumber) {
+    s = `${BIBLE_BOOKS[loc.BookNumber - 1] || 'Book ' + loc.BookNumber} ${loc.ChapterNumber ?? ''}`.trim();
+    if (block !== undefined && block !== null && blockType === 2) s += `:${block}`;
+    if (loc.KeySymbol) s += ` (${loc.KeySymbol})`;
+  } else {
+    const pub = [loc.KeySymbol, loc.IssueTagNumber ? fmtIssue(loc.IssueTagNumber) : null].filter(Boolean).join(' ');
+    s = [loc.Title, pub].filter(Boolean).join(' · ') || (loc.DocumentId ? `Document ${loc.DocumentId}` : '');
+    if (block !== undefined && block !== null && blockType === 1) s += ` ¶${block}`;
+  }
+  return s || `Location ${loc.LocationId}`;
+}
+
+function rangeLabel(loc, ranges) {
+  if (!ranges?.length) return locLabel(loc);
+  const ids = ranges.map(r => r.Identifier).sort((a, b) => a - b);
+  const span = ids[0] === ids[ids.length - 1] ? ids[0] : `${ids[0]}–${ids[ids.length - 1]}`;
+  return locLabel(loc, ranges[0].BlockType, span);
+}
+
+function locMap() {
+  return new Map(q(ed.db, 'SELECT * FROM Location').map(l => [l.LocationId, l]));
+}
+function groupBy(rows, key) {
+  const m = new Map();
+  for (const r of rows) { const k = r[key]; if (!m.has(k)) m.set(k, []); m.get(k).push(r); }
+  return m;
+}
+function userTags() { // Tag.Type 2 = playlists — not shown here
+  return tableExists(ed.db, 'Tag') ? q(ed.db, 'SELECT * FROM Tag WHERE Type != 2 ORDER BY Type, Name COLLATE NOCASE') : [];
+}
+const has = (...t) => t.every(n => tableExists(ed.db, n));
+
+// Each mode: load() → items, filters() → [[value,label]], text(item) for search,
+// match(item, filter), card(item) → html, editor(item) → html.
+const MODES = {
+  notes: {
+    load() {
+      if (!has('Note')) return [];
+      const locs = has('Location') ? locMap() : new Map();
+      const colors = has('UserMark') ? new Map(q(ed.db, 'SELECT UserMarkId, ColorIndex FROM UserMark').map(m => [m.UserMarkId, m.ColorIndex])) : new Map();
+      const tags = has('TagMap', 'Tag') ? groupBy(q(ed.db,
+        'SELECT tm.NoteId, t.TagId, t.Name FROM TagMap tm JOIN Tag t ON t.TagId = tm.TagId WHERE tm.NoteId IS NOT NULL ORDER BY t.Name COLLATE NOCASE'), 'NoteId') : new Map();
+      return q(ed.db, 'SELECT * FROM Note').map(n => ({
+        ...n, id: n.NoteId,
+        label: locLabel(locs.get(n.LocationId), n.BlockType, n.BlockIdentifier),
+        color: n.UserMarkId ? colors.get(n.UserMarkId) : undefined,
+        tags: tags.get(n.NoteId) || [],
+      })).sort((a, b) => String(b.LastModified || '').localeCompare(String(a.LastModified || '')));
+    },
+    filters: () => [['', 'All tags'], ['none', 'Without tag'], ...userTags().map(t => [`t${t.TagId}`, t.Name])],
+    text: n => `${n.Title || ''} ${n.Content || ''} ${n.label}`,
+    match: (n, f) => !f || (f === 'none' ? !n.tags.length : n.tags.some(t => `t${t.TagId}` === f)),
+    card: n => `
+      <div class="item-head">${dot(n.color)}<span class="item-title">${escHtml(n.Title || '(no title)')}</span></div>
+      <div class="item-meta">${escHtml(n.label)} · ${escHtml(fmtDate(n.LastModified))}</div>
+      ${n.Content ? `<div class="item-body">${escHtml(n.Content.slice(0, 400))}</div>` : ''}
+      ${n.tags.length ? `<div class="chips">${n.tags.map(t => `<span class="chip-tag">${escHtml(t.Name)}</span>`).join('')}</div>` : ''}`,
+    editor: n => {
+      const mine = new Set(n.tags.map(t => t.TagId));
+      const tagChips = has('Tag', 'TagMap') ? `
+        <div class="field">
+          <div class="field-head"><label>Tags</label></div>
+          <div class="chips">${userTags().filter(t => t.Type !== 0).map(t => `
+            <label class="chip-toggle"><input type="checkbox" class="edTagBox" value="${t.TagId}" ${mine.has(t.TagId) ? 'checked' : ''}>${escHtml(t.Name)}</label>`).join('')}
+          </div>
+          <input class="input" id="edNewTag" placeholder="+ new tag (optional)" style="margin-top:0.5rem;">
+        </div>` : '';
+      return `
+        <div class="item-meta" style="margin-bottom:0.75rem;">${dot(n.color)} ${escHtml(n.label)}</div>
+        <div class="field"><div class="field-head"><label for="edNoteTitle">Title</label></div>
+          <input class="input" id="edNoteTitle" value="${escHtml(n.Title || '')}"></div>
+        <div class="field"><div class="field-head"><label for="edNoteContent">Content</label></div>
+          <textarea class="input" id="edNoteContent" rows="${Math.min(16, Math.max(5, Math.ceil((n.Content || '').length / 60)))}"
+            style="font-family:inherit; font-size:0.85rem;">${escHtml(n.Content || '')}</textarea></div>
+        ${tagChips}
+        <div class="small muted">Created ${escHtml(fmtDate(n.Created))} · modified ${escHtml(fmtDate(n.LastModified))}</div>
+        ${editorButtons('Delete note')}`;
+    },
+    save(n) {
+      const title = document.getElementById('edNoteTitle').value;
+      const content = document.getElementById('edNoteContent').value;
+      const norm = (v, old) => v === '' && (old === null || old === undefined) ? null : v;
+      ed.db.run('BEGIN');
+      try {
+        if (title !== (n.Title ?? '') || content !== (n.Content ?? '')) {
+          ed.db.run('UPDATE Note SET Title = ?, Content = ?, LastModified = ? WHERE NoteId = ?',
+            [norm(title, n.Title), norm(content, n.Content), nowLike(n.LastModified), n.NoteId]);
+        }
+        if (has('Tag', 'TagMap')) {
+          const want = new Set([...document.querySelectorAll('.edTagBox:checked')].map(b => Number(b.value)));
+          const newName = document.getElementById('edNewTag').value.trim();
+          if (newName) want.add(ensureTag(newName));
+          const haveIds = new Set(n.tags.map(t => t.TagId));
+          for (const id of haveIds) if (!want.has(id)) ed.db.run('DELETE FROM TagMap WHERE NoteId = ? AND TagId = ?', [n.NoteId, id]);
+          for (const id of want) if (!haveIds.has(id)) addTagMap(id, 'NoteId', n.NoteId);
+        }
+        ed.db.run('COMMIT');
+      } catch (e) { ed.db.run('ROLLBACK'); throw e; }
+    },
+    remove: n => deleteWithCascade('Note', ['NoteId'], n),
+    confirmText: n => `Delete the note “${n.Title || '(no title)'}”?`,
+  },
+
+  marks: {
+    load() {
+      if (!has('UserMark')) return [];
+      const locs = has('Location') ? locMap() : new Map();
+      const ranges = has('BlockRange') ? groupBy(q(ed.db, 'SELECT * FROM BlockRange'), 'UserMarkId') : new Map();
+      const notes = has('Note') ? groupBy(q(ed.db, 'SELECT NoteId, Title, UserMarkId FROM Note WHERE UserMarkId IS NOT NULL'), 'UserMarkId') : new Map();
+      return q(ed.db, 'SELECT * FROM UserMark').map(m => {
+        const loc = locs.get(m.LocationId);
+        return { ...m, id: m.UserMarkId, loc, label: rangeLabel(loc, ranges.get(m.UserMarkId)),
+                 notes: notes.get(m.UserMarkId) || [] };
+      }).sort((a, b) => (a.loc?.BookNumber ?? 999) - (b.loc?.BookNumber ?? 999)
+        || (a.loc?.ChapterNumber ?? 0) - (b.loc?.ChapterNumber ?? 0) || a.label.localeCompare(b.label, undefined, { numeric: true }));
+    },
+    filters: () => [['', 'All colours'], ...Object.entries(MARK_COLOR_NAMES).map(([k, v]) => [k, v])],
+    text: m => `${m.label} ${m.notes.map(n => n.Title || '').join(' ')}`,
+    match: (m, f) => f === '' || String(m.ColorIndex) === f,
+    card: m => `
+      <div class="item-head">${dot(m.ColorIndex)}<span class="item-title">${escHtml(m.label)}</span></div>
+      <div class="item-meta">${escHtml(MARK_COLOR_NAMES[m.ColorIndex] ?? 'Colour ' + m.ColorIndex)}${
+        m.notes.length ? ` · note: ${escHtml(m.notes.map(n => n.Title || '(no title)').join(', '))}` : ''}</div>`,
+    editor: m => `
+      <div class="item-title" style="margin-bottom:0.75rem;">${escHtml(m.label)}</div>
+      <div class="field"><div class="field-head"><label>Colour</label></div>
+        <div class="color-pick">${[1, 2, 3, 4, 5, 6].map(c => `
+          <button type="button" class="${c === m.ColorIndex ? 'sel' : ''}" style="background:${MARK_COLORS[c]}" title="${MARK_COLOR_NAMES[c]}"
+            onclick="this.parentNode.querySelectorAll('button').forEach(b => b.classList.remove('sel')); this.classList.add('sel'); this.parentNode.dataset.color = ${c};"></button>`).join('')}
+        </div></div>
+      ${m.notes.length ? `<div class="small muted">Deleting this highlight keeps its note (${escHtml(m.notes.map(n => n.Title || '(no title)').join(', '))}).</div>` : ''}
+      ${editorButtons('Delete highlight')}`,
+    save(m) {
+      const c = Number(document.querySelector('.editing .color-pick').dataset.color || m.ColorIndex);
+      if (c !== m.ColorIndex) ed.db.run('UPDATE UserMark SET ColorIndex = ? WHERE UserMarkId = ?', [c, m.UserMarkId]);
+    },
+    remove: m => deleteWithCascade('UserMark', ['UserMarkId'], m),
+    confirmText: m => `Delete the highlight in ${m.label}?`,
+  },
+
+  bookmarks: {
+    load() {
+      if (!has('Bookmark')) return [];
+      const locs = has('Location') ? locMap() : new Map();
+      return q(ed.db, 'SELECT * FROM Bookmark').map(b => ({
+        ...b, id: b.BookmarkId,
+        pub: locLabel(locs.get(b.PublicationLocationId)),
+        label: locLabel(locs.get(b.LocationId), b.BlockType, b.BlockIdentifier),
+      })).sort((a, b) => a.pub.localeCompare(b.pub) || a.Slot - b.Slot);
+    },
+    filters: () => [],
+    text: b => `${b.Title || ''} ${b.Snippet || ''} ${b.pub} ${b.label}`,
+    match: () => true,
+    card: b => `
+      <div class="item-head"><span class="item-title">${escHtml(b.Title || '(no title)')}</span></div>
+      <div class="item-meta">${bmWhere(b)}</div>
+      ${b.Snippet ? `<div class="item-body">${escHtml(b.Snippet)}</div>` : ''}`,
+    editor: b => `
+      <div class="item-meta" style="margin-bottom:0.75rem;">${bmWhere(b)}</div>
+      <div class="field"><div class="field-head"><label for="edBmTitle">Title</label></div>
+        <input class="input" id="edBmTitle" value="${escHtml(b.Title || '')}"></div>
+      <div class="field"><div class="field-head"><label for="edBmSnippet">Snippet</label></div>
+        <textarea class="input" id="edBmSnippet" rows="3" style="font-family:inherit; font-size:0.85rem;">${escHtml(b.Snippet || '')}</textarea></div>
+      ${editorButtons('Delete bookmark')}`,
+    save(b) {
+      const t = document.getElementById('edBmTitle').value, s = document.getElementById('edBmSnippet').value;
+      if (t !== (b.Title ?? '') || s !== (b.Snippet ?? ''))
+        ed.db.run('UPDATE Bookmark SET Title = ?, Snippet = ? WHERE BookmarkId = ?', [t, s === '' && b.Snippet == null ? null : s, b.BookmarkId]);
+    },
+    remove: b => deleteWithCascade('Bookmark', ['BookmarkId'], b),
+    confirmText: b => `Delete the bookmark “${b.Title || '(no title)'}”?`,
+  },
+
+  tags: {
+    load() {
+      if (!has('Tag')) return [];
+      const cnt = has('TagMap') ? new Map(q(ed.db,
+        'SELECT TagId, COUNT(NoteId) AS notes, COUNT(LocationId) AS locs FROM TagMap GROUP BY TagId').map(r => [r.TagId, r])) : new Map();
+      return userTags().map(t => ({ ...t, id: t.TagId, notes: cnt.get(t.TagId)?.notes || 0, locs: cnt.get(t.TagId)?.locs || 0 }));
+    },
+    filters: () => [],
+    text: t => t.Name || '',
+    match: () => true,
+    card: t => `
+      <div class="item-head"><span class="item-title">${escHtml(t.Name)}</span>${t.Type === 0 ? '<span class="chip-tag">built-in</span>' : ''}</div>
+      <div class="item-meta">${t.notes} notes${t.locs ? ` · ${t.locs} places` : ''}</div>`,
+    editor: t => t.Type === 0
+      ? `<div class="item-title">${escHtml(t.Name)}</div>
+         <div class="small muted" style="margin:0.5rem 0;">This is JW Library’s built-in Favourites tag — it can’t be renamed or deleted.</div>
+         <div class="actions" style="margin-top:0.5rem;"><button class="btn btn-secondary btn-sm" onclick="edRenderList()">Close</button></div>`
+      : `<div class="field"><div class="field-head"><label for="edTagName">Name</label></div>
+           <input class="input" id="edTagName" value="${escHtml(t.Name)}"></div>
+         <div class="small muted">Deleting the tag removes it from ${t.notes} note(s)${t.locs ? ` and ${t.locs} place(s)` : ''}; the notes themselves are kept.</div>
+         ${editorButtons('Delete tag')}`,
+    save(t) {
+      const name = document.getElementById('edTagName').value.trim();
+      if (!name) throw new Error('The name cannot be empty.');
+      if (name === t.Name) return;
+      if (q1(ed.db, 'SELECT 1 FROM Tag WHERE Type = ? AND Name = ? AND TagId != ?', [t.Type, name, t.TagId]))
+        throw new Error(`A tag called “${name}” already exists.`);
+      ed.db.run('UPDATE Tag SET Name = ? WHERE TagId = ?', [name, t.TagId]);
+    },
+    remove: t => deleteWithCascade('Tag', ['TagId'], t),
+    confirmText: t => `Delete the tag “${t.Name}”?`,
+  },
+};
+
+function bmWhere(b) {
+  return `${escHtml(b.pub)} · slot ${b.Slot + 1}${b.label !== b.pub ? ` → ${escHtml(b.label)}` : ''}`;
+}
+
+function editorButtons(deleteLabel) {
+  return `<div id="edItemErr"></div>
+    <div class="actions" style="margin-top:0.75rem;">
+      <button class="btn btn-primary btn-sm" onclick="edItemSave()">Apply</button>
+      <button class="btn btn-secondary btn-sm" onclick="edRenderList()">Cancel</button>
+      <button class="btn btn-danger btn-sm" onclick="edItemDelete()">${deleteLabel}</button>
+    </div>`;
+}
+
+// Returns the TagId of a user tag with this name, creating it if needed.
+function ensureTag(name) {
+  const found = q1(ed.db, 'SELECT TagId FROM Tag WHERE Type = 1 AND Name = ?', [name]);
+  if (found !== null) return found;
+  ed.db.run('INSERT INTO Tag (Type, Name) VALUES (1, ?)', [name]);
+  return q1(ed.db, 'SELECT last_insert_rowid()');
+}
+
+function addTagMap(tagId, col, id) {
+  const pos = (q1(ed.db, 'SELECT MAX(Position) FROM TagMap WHERE TagId = ?', [tagId]) ?? -1) + 1;
+  ed.db.run(`INSERT INTO TagMap (TagId, "${col}", Position) VALUES (?, ?, ?)`, [tagId, id, pos]);
+}
+
+// ── mode switching & list rendering ─────────────────────────────────────────
+function edSetMode(mode) {
+  edMode = mode;
+  document.querySelectorAll('#edModes .tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  const tables = mode === 'tables';
+  document.getElementById('edFriendly').classList.toggle('hidden', tables);
+  document.getElementById('edTablesMode').classList.toggle('hidden', !tables);
+  document.getElementById('edFind').value = '';
+  if (tables) edFillTables(edView?.table);
+  else edLoadList(true);
+}
+
+function edLoadList(resetFilter) {
+  const M = MODES[edMode];
+  edList.all = M.load();
+  const sel = document.getElementById('edFilter');
+  const prev = resetFilter ? '' : sel.value;
+  const opts = M.filters();
+  sel.innerHTML = opts.map(([v, l]) => `<option value="${escHtml(v)}">${escHtml(l)}</option>`).join('');
+  sel.classList.toggle('hidden', !opts.length);
+  sel.value = opts.some(([v]) => v === prev) ? prev : '';
+  if (resetFilter) edList.shown = LIST_STEP;
+  edRenderList();
+}
+
+let edFindTimer = null;
+function edFindChanged() {
+  clearTimeout(edFindTimer);
+  edFindTimer = setTimeout(() => { edList.shown = LIST_STEP; edRenderList(); }, 200);
+}
+
+function edFiltered() {
+  const M = MODES[edMode];
+  const find = document.getElementById('edFind').value.trim().toLowerCase();
+  const f = document.getElementById('edFilter').value;
+  return edList.all.filter(it => M.match(it, f) && (!find || M.text(it).toLowerCase().includes(find)));
+}
+
+function edRenderList() {
+  const M = MODES[edMode];
+  const items = edFiltered();
+  const shown = items.slice(0, edList.shown);
+  const names = { notes: 'notes', marks: 'highlights', bookmarks: 'bookmarks', tags: 'tags' };
+  document.getElementById('edListInfo').textContent =
+    items.length === edList.all.length ? `${items.length} ${names[edMode]}` : `${items.length} of ${edList.all.length} ${names[edMode]}`;
+  const list = document.getElementById('edList');
+  list.innerHTML = shown.length
+    ? shown.map(it => `<div class="item" data-id="${it.id}" onclick="edItemEdit(${it.id})">${M.card(it)}</div>`).join('') +
+      (items.length > shown.length
+        ? `<button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="edList.shown += LIST_STEP; edRenderList()">Show more (${items.length - shown.length} left)</button>`
+        : '')
+    : `<div class="small muted" style="padding:1rem 0;">Nothing here${document.getElementById('edFind').value ? ' matches your search' : ''}.</div>`;
+}
+
+let edCurrent = null;
+function edItemEdit(id) {
+  edRenderList(); // closes any other open editor
+  const it = edList.all.find(x => x.id === id);
+  const el = document.querySelector(`#edList .item[data-id="${id}"]`);
+  if (!it || !el) return;
+  edCurrent = it;
+  el.onclick = null;
+  el.classList.add('editing');
+  el.innerHTML = MODES[edMode].editor(it);
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function edItemSave() {
+  try {
+    MODES[edMode].save(edCurrent);
+    edSetDirty();
+    edRefresh();
+  } catch (e) {
+    document.getElementById('edItemErr').innerHTML = `<div class="alert alert-err">${escHtml(e.message)}</div>`;
+  }
+}
+
+function edItemDelete() {
+  const M = MODES[edMode];
+  if (!confirm(M.confirmText(edCurrent))) return;
+  try {
+    M.remove(edCurrent);
+    edSetDirty();
+    edRefresh();
+  } catch (e) {
+    document.getElementById('edItemErr').innerHTML = `<div class="alert alert-err">${escHtml(e.message)}</div>`;
+  }
+}
+
+// Re-read everything from the database after a change.
+function edRefresh() {
+  if (!ed) return;
+  edRenderInfo();
+  if (edMode === 'tables') edFillTables(edView?.table);
+  else edLoadList(false);
+}
 
 // ── save / export ───────────────────────────────────────────────────────────
 function offerDownload(blob, name) {
@@ -1951,8 +2380,7 @@ async function edReplaceDb(file) {
     ed.db.close();
     ed.db = db;
     edSetDirty();
-    edRenderInfo();
-    edFillTables(edView?.table);
+    edRefresh();
     edMsg(`Database replaced with <b>${escHtml(file.name)}</b>. Press “Save .jwlibrary” to package it.` +
       (wasWal ? `<br><b>Note:</b> this file was in WAL mode. If your editor was still open when you copied it,
         the latest edits may be in a separate “-wal” file and missing here — close the editor and upload again to be sure.` : ''),
@@ -1967,8 +2395,7 @@ function edDiscard() {
   ed.db.close();
   ed.db = openDb(prepDb(ed.origBytes).bytes);
   edSetDirty(false);
-  edRenderInfo();
-  edFillTables(edView?.table);
+  edRefresh();
   edMsg('All changes discarded.');
 }
 

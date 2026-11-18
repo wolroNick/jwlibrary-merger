@@ -1,0 +1,12 @@
+# Never commit personal JW Library data
+*.jwlibrary
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*_unpacked/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
