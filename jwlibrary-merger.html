@@ -549,6 +549,99 @@
   .conflict-table tr:last-child td { border-bottom: none; }
   .badge-new { color: var(--success); font-weight: 600; }
   .badge-dup { color: var(--text3); }
+
+  /* Tabs */
+  .tabs {
+    margin-left: auto;
+    display: flex;
+    gap: 3px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+  }
+  .tab {
+    border: none;
+    background: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 7px;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text2);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+  @media (max-width: 560px) {
+    header { padding: 0.9rem 1rem; }
+    header span.chip { display: none; }
+    header h1 { font-size: 0.9rem; }
+    .header-icon { display: none; }
+    .container { padding: 1rem 0.75rem; }
+    .step { padding: 1.1rem; }
+  }
+
+  /* Form controls */
+  .input {
+    padding: 0.5rem 0.7rem;
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.85rem;
+    min-width: 0;
+  }
+  textarea.input {
+    width: 100%;
+    font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 0.8rem;
+    resize: vertical;
+  }
+  .toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.75rem; }
+  .toolbar .grow { flex: 1 1 160px; }
+  .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.75rem; border-radius: 7px; }
+  .btn-danger { background: var(--surface); border-color: var(--border); color: var(--danger); }
+  .btn-danger:hover { background: var(--danger-light); border-color: var(--danger); }
+  .alert-err { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+  .muted { color: var(--text3); }
+  .small { font-size: 0.75rem; }
+  .info-list {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.3rem 1rem;
+    font-size: 0.8rem;
+    margin-top: 0.75rem;
+  }
+  .info-list dt { color: var(--text3); }
+  .info-list dd { font-family: 'SF Mono', 'Fira Code', monospace; word-break: break-all; }
+  .ok-text { color: var(--success); }
+  .err-text { color: var(--danger); }
+  .data-table td.actions-cell { white-space: nowrap; max-width: none; }
+  .data-table tbody tr { cursor: pointer; }
+  .row-editor {
+    border: 1px solid var(--accent-mid);
+    background: var(--surface2);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin-top: 1rem;
+    animation: fadeIn 0.2s var(--ease) both;
+  }
+  .field { margin-bottom: 0.7rem; }
+  .field-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  .field-head label { color: var(--text2); font-weight: 600; }
+  .field .input { width: 100%; }
+  details summary { cursor: pointer; font-size: 0.85rem; color: var(--text2); font-weight: 500; }
+  .file-btn { position: relative; overflow: hidden; }
+  .file-btn input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -556,10 +649,14 @@
 <header>
   <div class="header-icon">📚</div>
   <h1>JW Library Merger</h1>
-  <span>.jwlibrary</span>
+  <span class="chip">.jwlibrary</span>
+  <nav class="tabs">
+    <button class="tab active" id="tabMerge" onclick="showView('merge')">Merge</button>
+    <button class="tab" id="tabEdit" onclick="showView('edit')">Edit backup</button>
+  </nav>
 </header>
 
-<div class="container">
+<div class="container" id="viewMerge">
 
   <!-- Step 1: Load files -->
   <div class="step" id="step1">
@@ -647,17 +744,104 @@
 
 </div>
 
+<!-- ═══════════════ EDIT VIEW ═══════════════ -->
+<div class="container hidden" id="viewEdit">
+
+  <!-- E1: Load -->
+  <div class="step" id="edStep1">
+    <div class="step-header">
+      <div class="step-num">1</div>
+      <div>
+        <div class="step-title">Open a backup</div>
+        <div class="step-sub">One .jwlibrary file — nothing leaves your device</div>
+      </div>
+    </div>
+    <div class="drop-zone" id="edDrop">
+      <input type="file" accept=".jwlibrary" onchange="edLoad(this.files[0])">
+      <span class="drop-icon">&#128194;</span>
+      <div class="drop-label">Backup to edit</div>
+      <div class="drop-hint">drop or click to browse</div>
+    </div>
+    <div id="edInfo" class="hidden"></div>
+  </div>
+
+  <!-- E2: Browse & edit -->
+  <div class="step hidden" id="edStep2">
+    <div class="step-header">
+      <div class="step-num">2</div>
+      <div>
+        <div class="step-title">Browse &amp; edit</div>
+        <div class="step-sub">Click a row to edit it. Changes stay in memory until you save.</div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <select class="input" id="edTable" onchange="edSelectTable(this.value)"></select>
+      <input class="input grow" id="edSearch" type="search" placeholder="Search in this table…" oninput="edSearchChanged()">
+    </div>
+    <div id="edTableWrap" style="overflow-x:auto;"></div>
+    <div class="toolbar" style="margin-top:0.75rem; margin-bottom:0;">
+      <button class="btn btn-secondary btn-sm" id="edPrev" onclick="edPage(-1)">&larr; Prev</button>
+      <button class="btn btn-secondary btn-sm" id="edNext" onclick="edPage(1)">Next &rarr;</button>
+      <span class="small muted" id="edPageInfo"></span>
+    </div>
+    <div id="edRowEditor" class="row-editor hidden"></div>
+
+    <hr>
+    <details id="edSqlBox">
+      <summary>Advanced: run SQL</summary>
+      <div style="margin-top:0.75rem;">
+        <textarea class="input" id="edSql" rows="4" spellcheck="false" placeholder="SELECT * FROM Note WHERE Title LIKE '%prayer%'"></textarea>
+        <div class="toolbar" style="margin-top:0.5rem;">
+          <button class="btn btn-secondary btn-sm" onclick="edRunSql()">Run</button>
+          <span class="small muted">Ctrl+Enter. Use with care — you can undo everything with “Discard all changes”.</span>
+        </div>
+        <div id="edSqlResult" style="overflow-x:auto;"></div>
+      </div>
+    </details>
+  </div>
+
+  <!-- E3: Save -->
+  <div class="step hidden" id="edStep3">
+    <div class="step-header">
+      <div class="step-num">3</div>
+      <div>
+        <div class="step-title">Save</div>
+        <div class="step-sub" id="edDirtyInfo">No changes yet</div>
+      </div>
+    </div>
+    <label class="small" style="display:flex; gap:0.5rem; align-items:center; color:var(--text2);">
+      <input type="checkbox" id="edUpdateDate" checked> Set backup modification date to now
+    </label>
+    <div class="actions">
+      <button class="btn btn-primary" onclick="edSave()">Save .jwlibrary</button>
+      <a class="btn btn-download hidden" id="edDownload" download>&#8659; Download</a>
+    </div>
+    <hr>
+    <div class="small" style="color:var(--text2); line-height:1.7; margin-bottom:0.5rem;">
+      <b>Edit in an external SQLite editor</b> (e.g. DB Browser for SQLite): download the database,
+      edit it, close the editor, then upload it back and press “Save .jwlibrary” — the hash is updated automatically.
+    </div>
+    <div class="toolbar">
+      <button class="btn btn-secondary btn-sm" onclick="edDownloadDb()">&#8659; Download userData.db</button>
+      <span class="btn btn-secondary btn-sm file-btn">&#8657; Upload edited userData.db
+        <input type="file" onchange="edReplaceDb(this.files[0]); this.value='';">
+      </span>
+      <button class="btn btn-danger btn-sm" onclick="edDiscard()">Discard all changes</button>
+    </div>
+    <div id="edMsg"></div>
+  </div>
+
+</div>
+
 <script>
 let SQL = null;
 let loadedFiles = [];
 let analysisResult = null;
 let slotCount = 2;
 
-initSQL();
-
-async function initSQL() {
-  SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
-}
+// Shared promise: every loader awaits it, so picking a file before sql.js is ready no longer crashes.
+const sqlReady = initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` })
+  .then(s => (SQL = s));
 
 function addSlot() {
   if (slotCount >= 6) return;
@@ -683,6 +867,7 @@ async function loadFile(idx, input) {
   if (drop) {
     drop.innerHTML = `<div class="loading-card"><div class="spinner"></div><span>Reading file…</span></div>`;
   }
+  await sqlReady;
   const ab = await file.arrayBuffer();
   const zip = await JSZip.loadAsync(ab);
   const manifest = JSON.parse(await zip.file('manifest.json').async('string'));
@@ -1263,8 +1448,9 @@ async function sha256hex(bytes) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function escHtml(s) {
-  if (!s) return '';
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function reset() {
@@ -1295,11 +1481,507 @@ function reset() {
   setProgress(0);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// VIEWS
+// ═══════════════════════════════════════════════════════════════════════════
+let currentView = 'merge';
+function showView(v) {
+  currentView = v;
+  document.getElementById('viewMerge').classList.toggle('hidden', v !== 'merge');
+  document.getElementById('viewEdit').classList.toggle('hidden', v !== 'edit');
+  document.getElementById('tabMerge').classList.toggle('active', v === 'merge');
+  document.getElementById('tabEdit').classList.toggle('active', v === 'edit');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EDIT BACKUP  (replaces jwlibrary_tools.py: unpack / edit / rehash / repack)
+// ═══════════════════════════════════════════════════════════════════════════
+const PAGE_SIZE = 50;
+let ed = null;      // { file, zip, manifest, origBytes, db, dirty, wasWal, hashOk }
+let edView = null;  // { table, cols, pkCols, useRowid, page, search, total, rows }
+let edUrl = null;
+
+// SQLite files start with this 16-byte header.
+const SQLITE_MAGIC = 'SQLite format 3\0';
+
+// Validates a SQLite file and switches it out of WAL mode (bytes 18/19 = 2) so it
+// opens in sql.js. Returns { bytes, wasWal }.
+function prepDb(bytes) {
+  const head = String.fromCharCode(...bytes.slice(0, 16));
+  if (head !== SQLITE_MAGIC) throw new Error('This is not a SQLite database file.');
+  let wasWal = false;
+  if (bytes[18] === 2 || bytes[19] === 2) {
+    bytes = bytes.slice();
+    bytes[18] = 1; bytes[19] = 1;
+    wasWal = true;
+  }
+  return { bytes, wasWal };
+}
+
+function openDb(bytes) {
+  const db = new SQL.Database(bytes);
+  db.exec('SELECT count(*) FROM sqlite_master'); // throws if the file is corrupt
+  return db;
+}
+
+// Run a query and return an array of plain objects.
+function q(db, sql, params = []) {
+  const stmt = db.prepare(sql);
+  try {
+    stmt.bind(params);
+    const out = [];
+    while (stmt.step()) out.push(stmt.getAsObject());
+    return out;
+  } finally { stmt.free(); }
+}
+function q1(db, sql, params = []) {
+  const r = q(db, sql, params)[0];
+  return r ? Object.values(r)[0] : null;
+}
+
+function tableExists(db, name) {
+  return !!q1(db, "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", [name]);
+}
+
+// Same timestamp style as the existing value (Z vs +00:00, with/without ms), always UTC.
+function nowLike(old) {
+  const iso = new Date().toISOString(); // 2026-11-18T10:00:00.000Z
+  if (typeof old !== 'string') return iso.slice(0, 19) + 'Z';
+  const hasMs = /T\d\d:\d\d:\d\d\.\d+/.test(old);
+  const base = hasMs ? iso.slice(0, 23) : iso.slice(0, 19);
+  const m = old.match(/(Z|[+-]\d\d:?\d\d)$/);
+  if (!m) return base;
+  if (m[1] === 'Z') return base + 'Z';
+  return base + (m[1].includes(':') ? '+00:00' : '+0000');
+}
+
+function safeFileName(s) {
+  return String(s || 'BACKUP').replace(/[\\/:*?"<>|\x00-\x1f]+/g, '_').trim() || 'BACKUP';
+}
+
+function fmtDate(d) {
+  const t = new Date(d);
+  return isNaN(t) ? (d || '—') : t.toLocaleString();
+}
+
+function edMsg(html, cls = 'alert-info') {
+  document.getElementById('edMsg').innerHTML = html ? `<div class="alert ${cls}">${html}</div>` : '';
+}
+
+function edSetDirty(v = true) {
+  ed.dirty = v;
+  document.getElementById('edDirtyInfo').textContent = v ? 'Unsaved changes' : 'No changes yet';
+  document.getElementById('edDownload').classList.add('hidden');
+}
+
+// ── load ────────────────────────────────────────────────────────────────────
+async function edLoad(file) {
+  if (!file) return;
+  if (ed?.dirty && !confirm('You have unsaved changes. Open another file anyway?')) return;
+  const drop = document.getElementById('edDrop');
+  const info = document.getElementById('edInfo');
+  info.classList.add('hidden');
+  drop.classList.remove('loaded');
+  drop.innerHTML = `<div class="loading-card"><div class="spinner"></div><span>Reading file…</span></div>`;
+  try {
+    await sqlReady;
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const mf = zip.file('manifest.json'), dbf = zip.file('userData.db');
+    if (!mf || !dbf) throw new Error('Not a JW Library backup: manifest.json or userData.db is missing.');
+    const manifest = JSON.parse(await mf.async('string'));
+    const origBytes = await dbf.async('uint8array');
+    const { bytes, wasWal } = prepDb(origBytes);
+    const db = openDb(bytes);
+    const actualHash = await sha256hex(origBytes);
+    const storedHash = manifest.userDataBackup?.hash || '';
+    if (ed?.db) ed.db.close();
+    ed = { file, zip, manifest, origBytes, db, dirty: false, wasWal,
+           hashOk: storedHash.toLowerCase() === actualHash };
+    edRenderInfo();
+    edFillTables();
+    edSetDirty(false);
+    edMsg('');
+    document.getElementById('edStep2').classList.remove('hidden');
+    document.getElementById('edStep3').classList.remove('hidden');
+  } catch (e) {
+    console.error(e);
+    ed = null;
+    document.getElementById('edStep2').classList.add('hidden');
+    document.getElementById('edStep3').classList.add('hidden');
+    drop.innerHTML = `<input type="file" accept=".jwlibrary" onchange="edLoad(this.files[0])">
+      <span class="drop-icon">&#9888;</span>
+      <div class="drop-label err-text">Could not open ${escHtml(file.name)}</div>
+      <div class="drop-hint">${escHtml(e.message)} — click to choose another file</div>`;
+  }
+}
+
+function edRenderInfo() {
+  const drop = document.getElementById('edDrop');
+  const m = ed.manifest, u = m.userDataBackup || {};
+  const s = getStats(ed.db);
+  drop.classList.add('loaded');
+  drop.innerHTML = `
+    <input type="file" accept=".jwlibrary" onchange="edLoad(this.files[0])">
+    <div class="file-name">${escHtml(ed.file.name)}</div>
+    <div class="file-stats" style="justify-content:center;">
+      <span class="stat-pill">${s.Note} notes</span>
+      <span class="stat-pill">${s.UserMark} highlights</span>
+      <span class="stat-pill">${s.Bookmark} bookmarks</span>
+      <span class="stat-pill">${s.Tag} tags</span>
+    </div>
+    <div class="drop-hint" style="margin-top:0.6rem;">click to open a different file</div>`;
+  const info = document.getElementById('edInfo');
+  info.innerHTML = `
+    <dl class="info-list">
+      <dt>Device</dt><dd>${escHtml(u.deviceName || '—')}</dd>
+      <dt>Last modified</dt><dd>${escHtml(fmtDate(u.lastModifiedDate))}</dd>
+      <dt>Schema version</dt><dd>${escHtml(String(u.schemaVersion ?? '—'))}</dd>
+      <dt>Hash</dt><dd>${ed.hashOk
+        ? '<span class="ok-text">&#10003; matches database</span>'
+        : '<span class="err-text">&#10007; does not match — will be fixed on save</span>'}</dd>
+    </dl>`;
+  info.classList.remove('hidden');
+}
+
+// ── table browser ───────────────────────────────────────────────────────────
+function edFillTables(keep) {
+  const names = q(ed.db, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").map(r => r.name);
+  const sel = document.getElementById('edTable');
+  sel.innerHTML = names.map(n => {
+    const c = q1(ed.db, `SELECT COUNT(*) FROM "${n}"`);
+    return `<option value="${escHtml(n)}">${escHtml(n)} (${c})</option>`;
+  }).join('');
+  const pick = keep && names.includes(keep) ? keep : (names.includes('Note') ? 'Note' : names[0]);
+  sel.value = pick;
+  if (pick !== keep) document.getElementById('edSearch').value = '';
+  edSelectTable(pick);
+}
+
+function edSelectTable(table) {
+  const cols = q(ed.db, `PRAGMA table_info("${table}")`);
+  const pkCols = cols.filter(c => c.pk > 0).sort((a, b) => a.pk - b.pk).map(c => c.name);
+  edView = { table, cols, pkCols: pkCols.length ? pkCols : ['rowid'], useRowid: !pkCols.length,
+             page: 0, search: document.getElementById('edSearch').value.trim(), total: 0, rows: [] };
+  edRenderTable();
+}
+
+let edSearchTimer = null;
+function edSearchChanged() {
+  clearTimeout(edSearchTimer);
+  edSearchTimer = setTimeout(() => {
+    edView.search = document.getElementById('edSearch').value.trim();
+    edView.page = 0;
+    edRenderTable();
+  }, 200);
+}
+
+function edPage(d) {
+  const maxPage = Math.max(0, Math.ceil(edView.total / PAGE_SIZE) - 1);
+  edView.page = Math.min(maxPage, Math.max(0, edView.page + d));
+  edRenderTable();
+}
+
+function edWhere() {
+  if (!edView.search) return { sql: '', params: [] };
+  const like = `%${edView.search}%`;
+  return {
+    sql: 'WHERE ' + edView.cols.map(c => `CAST("${c.name}" AS TEXT) LIKE ?`).join(' OR '),
+    params: edView.cols.map(() => like),
+  };
+}
+
+function cellHtml(v, max = 60) {
+  if (v === null || v === undefined) return '<span class="muted">NULL</span>';
+  if (v instanceof Uint8Array) return `<span class="muted">[BLOB ${v.length} B]</span>`;
+  const s = String(v);
+  return escHtml(s.length > max ? s.slice(0, max) + '…' : s);
+}
+
+function edRenderTable() {
+  const { table, cols, useRowid } = edView;
+  const w = edWhere();
+  edView.total = q1(ed.db, `SELECT COUNT(*) FROM "${table}" ${w.sql}`, w.params);
+  edView.rows = q(ed.db,
+    `SELECT ${useRowid ? 'rowid AS "rowid", ' : ''}* FROM "${table}" ${w.sql} LIMIT ${PAGE_SIZE} OFFSET ?`,
+    [...w.params, edView.page * PAGE_SIZE]);
+
+  const wrap = document.getElementById('edTableWrap');
+  if (!edView.rows.length) {
+    wrap.innerHTML = `<div class="small muted" style="padding:1rem 0;">${edView.search ? 'No matching rows.' : 'This table is empty.'}</div>`;
+  } else {
+    wrap.innerHTML = `<table class="conflict-table data-table">
+      <thead><tr>${cols.map(c => `<th>${escHtml(c.name)}</th>`).join('')}<th></th></tr></thead>
+      <tbody>${edView.rows.map((r, i) => `
+        <tr onclick="edEditRow(${i})">
+          ${cols.map(c => `<td>${cellHtml(r[c.name])}</td>`).join('')}
+          <td class="actions-cell">
+            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); edDeleteRow(${i})" title="Delete">&#10005;</button>
+          </td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  }
+  const from = edView.total ? edView.page * PAGE_SIZE + 1 : 0;
+  const to = Math.min(edView.total, (edView.page + 1) * PAGE_SIZE);
+  document.getElementById('edPageInfo').textContent = `${from}–${to} of ${edView.total}`;
+  document.getElementById('edPrev').disabled = edView.page === 0;
+  document.getElementById('edNext').disabled = to >= edView.total;
+  document.getElementById('edRowEditor').classList.add('hidden');
+}
+
+function pkWhere(row) {
+  return {
+    sql: edView.pkCols.map(c => `"${c}" = ?`).join(' AND '),
+    params: edView.pkCols.map(c => row[c]),
+  };
+}
+
+// ── row editor ──────────────────────────────────────────────────────────────
+function edEditRow(i) {
+  const row = edView.rows[i];
+  const box = document.getElementById('edRowEditor');
+  const fields = edView.cols.map((c, ci) => {
+    const v = row[c.name];
+    const isPk = edView.pkCols.includes(c.name);
+    const isBlob = v instanceof Uint8Array;
+    const locked = isPk || isBlob;
+    const str = v === null || v === undefined || isBlob ? '' : String(v);
+    const long = str.length > 60 || /content|value|text/i.test(c.name);
+    const control = long
+      ? `<textarea class="input" id="edF${ci}" rows="${Math.min(12, Math.max(3, Math.ceil(str.length / 70)))}" ${locked ? 'disabled' : ''}>${escHtml(str)}</textarea>`
+      : `<input class="input" id="edF${ci}" value="${escHtml(str)}" ${locked ? 'disabled' : ''}>`;
+    const nullBox = locked || c.notnull ? '' :
+      `<label class="muted"><input type="checkbox" id="edN${ci}" ${v === null ? 'checked' : ''}> NULL</label>`;
+    return `<div class="field">
+      <div class="field-head"><label for="edF${ci}">${escHtml(c.name)}
+        <span class="muted" style="font-weight:400;">${escHtml(c.type || '')}${isPk ? ' · key' : ''}${isBlob ? ' · blob (read-only)' : ''}</span></label>${nullBox}</div>
+      ${control}</div>`;
+  }).join('');
+  box.innerHTML = `
+    <div class="step-title" style="margin-bottom:0.75rem;">Edit row in ${escHtml(edView.table)}</div>
+    ${fields}
+    <div id="edRowErr"></div>
+    <div class="actions" style="margin-top:0.5rem;">
+      <button class="btn btn-primary btn-sm" onclick="edSaveRow(${i})">Apply</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('edRowEditor').classList.add('hidden')">Cancel</button>
+      <button class="btn btn-danger btn-sm" onclick="edDeleteRow(${i})">Delete row</button>
+    </div>`;
+  box.classList.remove('hidden');
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function coerce(str, type) {
+  const t = (type || '').toUpperCase();
+  if (t.includes('INT') && /^-?\d+$/.test(str.trim())) return Number(str.trim());
+  if ((t.includes('REAL') || t.includes('FLOA') || t.includes('DOUB')) && str.trim() !== '' && !isNaN(str)) return Number(str);
+  return str;
+}
+
+function edSaveRow(i) {
+  const row = edView.rows[i];
+  const sets = [], params = [];
+  const changed = new Set();
+  edView.cols.forEach((c, ci) => {
+    if (edView.pkCols.includes(c.name) || row[c.name] instanceof Uint8Array) return;
+    const isNull = document.getElementById(`edN${ci}`)?.checked;
+    const nv = isNull ? null : coerce(document.getElementById(`edF${ci}`).value, c.type);
+    const ov = row[c.name] ?? null;
+    if (nv !== ov && String(nv) !== String(ov)) {
+      sets.push(`"${c.name}" = ?`); params.push(nv); changed.add(c.name);
+    }
+  });
+  // Edited note text → bump its LastModified, unless the user set it by hand.
+  if (edView.table === 'Note' && (changed.has('Title') || changed.has('Content'))
+      && !changed.has('LastModified') && 'LastModified' in row) {
+    sets.push('"LastModified" = ?'); params.push(nowLike(row.LastModified));
+  }
+  if (!sets.length) { document.getElementById('edRowEditor').classList.add('hidden'); return; }
+  const w = pkWhere(row);
+  try {
+    ed.db.run(`UPDATE "${edView.table}" SET ${sets.join(', ')} WHERE ${w.sql}`, [...params, ...w.params]);
+    edSetDirty();
+    edRenderTable();
+  } catch (e) {
+    document.getElementById('edRowErr').innerHTML = `<div class="alert alert-err">${escHtml(e.message)}</div>`;
+  }
+}
+
+// ── delete (keeps the database consistent) ──────────────────────────────────
+// Dependent rows that are safe to remove/unlink together with the parent row.
+const CASCADE = {
+  Note:     id => [['DELETE FROM TagMap WHERE NoteId = ?', [id]]],
+  UserMark: id => [['DELETE FROM BlockRange WHERE UserMarkId = ?', [id]],
+                   ['UPDATE Note SET UserMarkId = NULL WHERE UserMarkId = ?', [id]]],
+  Tag:      id => [['DELETE FROM TagMap WHERE TagId = ?', [id]]],
+};
+
+// Any other table that still points at this row → refuse, instead of leaving broken links.
+function findReferences(db, table, row) {
+  const refs = [];
+  const tables = q(db, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").map(r => r.name);
+  for (const t of tables) {
+    for (const fk of q(db, `PRAGMA foreign_key_list("${t}")`)) {
+      if (fk.table !== table) continue;
+      const target = fk.to || edView.pkCols[0];
+      const v = row[target];
+      if (v === null || v === undefined) continue;
+      const n = q1(db, `SELECT COUNT(*) FROM "${t}" WHERE "${fk.from}" = ?`, [v]);
+      if (n > 0) refs.push(`${n} × ${t}.${fk.from}`);
+    }
+  }
+  return refs;
+}
+
+function describeRow(row) {
+  return row.Title || row.Name || row.Label || row.Value || row.UserMarkGuid || row.Guid || '';
+}
+
+function edDeleteRow(i) {
+  const row = edView.rows[i];
+  const { table } = edView;
+  const label = describeRow(row);
+  if (!confirm(`Delete this row from ${table}?${label ? `\n\n“${String(label).slice(0, 80)}”` : ''}`)) return;
+  const id = row[edView.pkCols[0]];
+  const w = pkWhere(row);
+  try {
+    ed.db.run('BEGIN');
+    for (const [sql, p] of (CASCADE[table]?.(id) || [])) {
+      if (tableExists(ed.db, sql.match(/(?:FROM|UPDATE) (\w+)/)[1])) ed.db.run(sql, p);
+    }
+    const refs = findReferences(ed.db, table, row);
+    if (refs.length) throw new Error(`Still used by: ${refs.join(', ')}. Delete those rows first.`);
+    ed.db.run(`DELETE FROM "${table}" WHERE ${w.sql}`, w.params);
+    ed.db.run('COMMIT');
+    edSetDirty();
+    edFillTables(table);
+  } catch (e) {
+    try { ed.db.run('ROLLBACK'); } catch (_) {}
+    alert('Not deleted: ' + e.message);
+  }
+}
+
+// ── SQL console ─────────────────────────────────────────────────────────────
+function edRunSql() {
+  const sql = document.getElementById('edSql').value.trim();
+  const out = document.getElementById('edSqlResult');
+  if (!sql) return;
+  const before = q1(ed.db, 'SELECT total_changes()');
+  try {
+    const res = ed.db.exec(sql);
+    const changes = q1(ed.db, 'SELECT total_changes()') - before;
+    const isRead = /^\s*(select|pragma|explain|with)\b/i.test(sql) && changes === 0;
+    if (!isRead) edSetDirty();
+    let html = '';
+    const last = res[res.length - 1];
+    if (last) {
+      const shown = last.values.slice(0, 200);
+      html += `<table class="conflict-table"><thead><tr>${last.columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr></thead>
+        <tbody>${shown.map(r => `<tr>${r.map(v => `<td>${cellHtml(v, 80)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      if (last.values.length > shown.length) html += `<div class="small muted">Showing 200 of ${last.values.length} rows.</div>`;
+    }
+    html += `<div class="small ok-text" style="margin-top:0.5rem;">&#10003; OK${changes ? ` — ${changes} row(s) changed` : ''}${last ? ` — ${last.values.length} row(s) returned` : ''}</div>`;
+    out.innerHTML = html;
+    if (!isRead) edFillTables(edView?.table);
+  } catch (e) {
+    out.innerHTML = `<div class="alert alert-err">${escHtml(e.message)}</div>`;
+  }
+}
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'edSql' && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); edRunSql(); }
+});
+
+// ── save / export ───────────────────────────────────────────────────────────
+function offerDownload(blob, name) {
+  if (edUrl) URL.revokeObjectURL(edUrl);
+  edUrl = URL.createObjectURL(blob);
+  const a = document.getElementById('edDownload');
+  a.href = edUrl;
+  a.download = name;
+  a.innerHTML = `&#8659; Download ${escHtml(name)}`;
+  a.classList.remove('hidden');
+}
+
+async function edSave() {
+  try {
+    const dbBytes = ed.db.export();
+    const hash = await sha256hex(dbBytes);
+    const manifest = JSON.parse(JSON.stringify(ed.manifest));
+    manifest.userDataBackup = manifest.userDataBackup || {};
+    const oldHash = manifest.userDataBackup.hash || '';
+    manifest.userDataBackup.hash = hash;
+    if (document.getElementById('edUpdateDate').checked) {
+      manifest.userDataBackup.lastModifiedDate = nowLike(manifest.userDataBackup.lastModifiedDate);
+    }
+    const out = new JSZip();
+    for (const [name, z] of Object.entries(ed.zip.files)) {   // keep media files etc.
+      if (z.dir || name === 'userData.db' || name === 'manifest.json') continue;
+      out.file(name, await z.async('uint8array'));
+    }
+    out.file('manifest.json', JSON.stringify(manifest));
+    out.file('userData.db', dbBytes);
+    const blob = await out.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    const name = `${new Date().toISOString().slice(0, 10)}_${safeFileName(manifest.userDataBackup.deviceName)}_edited.jwlibrary`;
+    offerDownload(blob, name);
+    edSetDirty(false);
+    document.getElementById('edDownload').classList.remove('hidden');
+    edMsg(`Saved. Hash updated: <code>${escHtml(oldHash.slice(0, 12) || '—')}…</code> &rarr; <code>${hash.slice(0, 12)}…</code><br>
+      To restore: JW Library &rarr; Settings &rarr; Backup and restore &rarr; Restore. Keep your original file until you have checked the result.`);
+  } catch (e) {
+    edMsg(escHtml('Save failed: ' + e.message), 'alert-err');
+  }
+}
+
+function edDownloadDb() {
+  const blob = new Blob([ed.db.export()], { type: 'application/vnd.sqlite3' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'userData.db';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+async function edReplaceDb(file) {
+  if (!file || !ed) return;
+  try {
+    const { bytes, wasWal } = prepDb(new Uint8Array(await file.arrayBuffer()));
+    const db = openDb(bytes);
+    const missing = ['Note', 'Location', 'UserMark'].filter(t => !tableExists(db, t));
+    if (missing.length && !confirm(`This database has no ${missing.join(', ')} table(s) — it may not be a JW Library database. Use it anyway?`)) {
+      db.close(); return;
+    }
+    ed.db.close();
+    ed.db = db;
+    edSetDirty();
+    edRenderInfo();
+    edFillTables(edView?.table);
+    edMsg(`Database replaced with <b>${escHtml(file.name)}</b>. Press “Save .jwlibrary” to package it.` +
+      (wasWal ? `<br><b>Note:</b> this file was in WAL mode. If your editor was still open when you copied it,
+        the latest edits may be in a separate “-wal” file and missing here — close the editor and upload again to be sure.` : ''),
+      wasWal ? 'alert-warn' : 'alert-info');
+  } catch (e) {
+    edMsg(escHtml('Could not use this file: ' + e.message), 'alert-err');
+  }
+}
+
+function edDiscard() {
+  if (!ed || !confirm('Discard all changes and go back to the original file?')) return;
+  ed.db.close();
+  ed.db = openDb(prepDb(ed.origBytes).bytes);
+  edSetDirty(false);
+  edRenderInfo();
+  edFillTables(edView?.table);
+  edMsg('All changes discarded.');
+}
+
+window.addEventListener('beforeunload', e => {
+  if (ed?.dirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
 // Drag and drop support
 document.addEventListener('dragover', e => e.preventDefault());
 document.addEventListener('drop', e => {
   e.preventDefault();
   const files = [...e.dataTransfer.files].filter(f => f.name.endsWith('.jwlibrary'));
+  if (currentView === 'edit') { if (files[0]) edLoad(files[0]); return; }
   files.forEach((file, i) => {
     const idx = i < slotCount ? i : null;
     if (idx !== null) {
