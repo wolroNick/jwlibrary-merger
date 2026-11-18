@@ -34,7 +34,7 @@ Pobierz repozytorium (**Code → Download ZIP**), rozpakuj i otwórz `index.html
 ### Na telefonie — wybór i zapis plików
 
 - Pliki `.jwlibrary` wybierasz z „Pobranych”, Dysku Google, iCloud itp. — aplikacja sama sprawdza, czy plik jest poprawnym backupem.
-- Gotowy plik pobierasz przyciskiem **Download**. Jeśli przeglądarka pozwala, pojawi się też **Share…** — otwiera systemowe menu udostępniania (np. zapis na Dysku Google albo wysłanie do JW Library). Na Androidzie Chrome zwykle nie pozwala udostępniać plików `.jwlibrary`, więc tam użyj **Download**, a potem w JW Library wybierz plik z folderu „Pobrane”.
+- Gotowy plik pobierasz przyciskiem **Download**. Jeśli przeglądarka pozwala, pojawi się też **Share…** — otwiera systemowe menu udostępniania (np. zapis na Dysku Google albo wysłanie do JW Library). Na Androidzie Chrome nie pozwala udostępniać plików `.jwlibrary`, więc przycisku **Share…** tam nie ma — użyj **Download**, a potem w JW Library (Ustawienia → Kopia zapasowa → Przywróć) wybierz plik z folderu „Pobrane” albo otwórz go w aplikacji **Pliki** i wybierz Udostępnij → JW Library.
 
 ## Krok po kroku
 

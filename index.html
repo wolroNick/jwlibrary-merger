@@ -831,10 +831,14 @@
       <button class="btn btn-secondary hidden" id="shareBtn">&#8679; Share…</button>
       <button class="btn btn-secondary" onclick="reset()">Merge more files</button>
     </div>
+    <div class="small muted hidden" id="shareHint" style="margin-top:0.6rem; line-height:1.6;">
+      <b>On a phone</b> the file is saved to <b>Downloads</b>. In JW Library go to Settings &rarr; Backup and restore &rarr; Restore and pick it there —
+      or open it in the <b>Files</b> app and tap Share &rarr; JW Library (or Google Drive).
+    </div>
     <hr>
     <div style="font-size:0.8rem; color:var(--text3); line-height:1.7;">
       To restore: open JW Library &rarr; Settings &rarr; Backup and restore &rarr; Restore, and select the merged file.<br>
-      On a phone you can also tap <b>Share…</b> and choose JW Library (if offered), or save the file to Google Drive first.
+      On iPhone/iPad you can also tap <b>Share…</b> and choose JW Library or Google Drive.
     </div>
   </div>
 
@@ -932,6 +936,10 @@
       <button class="btn btn-primary" onclick="edSave()">Save .jwlibrary</button>
       <a class="btn btn-download hidden" id="edDownload" download>&#8659; Download</a>
       <button class="btn btn-secondary hidden" id="edShareBtn">&#8679; Share…</button>
+    </div>
+    <div class="small muted hidden" id="edShareHint" style="margin-top:0.6rem; line-height:1.6;">
+      <b>On a phone</b> the file is saved to <b>Downloads</b>. In JW Library go to Settings &rarr; Backup and restore &rarr; Restore and pick it there —
+      or open it in the <b>Files</b> app and tap Share &rarr; JW Library (or Google Drive).
     </div>
     <hr>
     <div class="small" style="color:var(--text2); line-height:1.7; margin-bottom:0.5rem;">
@@ -1776,6 +1784,7 @@ function edSetDirty(v = true) {
   document.getElementById('edDirtyInfo').textContent = v ? 'Unsaved changes' : 'No changes yet';
   document.getElementById('edDownload').classList.add('hidden');
   document.getElementById('edShareBtn').classList.add('hidden');
+  document.getElementById('edShareHint').classList.add('hidden');
 }
 
 // ── load ────────────────────────────────────────────────────────────────────
@@ -2560,13 +2569,34 @@ function shareableFile(blob, name) {
   }
   return null;
 }
+// Chrome on Android says it can share any file, then refuses .jwlibrary with
+// "Permission denied" — so on Android the button is not offered at all, and if
+// sharing ever fails elsewhere the file is downloaded instead and the button is
+// not shown again on this device.
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+const SHARE_UI = {
+  shareBtn:   { download: 'downloadLink', hint: 'shareHint' },
+  edShareBtn: { download: 'edDownload',   hint: 'edShareHint' },
+};
+function shareBroken() {
+  try { return localStorage.getItem('jwlm-share-broken') === '1'; } catch (_) { return false; }
+}
 function setupShare(btnId, blob, name) {
   const btn = document.getElementById(btnId);
-  const file = shareableFile(blob, name);
+  const { download, hint } = SHARE_UI[btnId];
+  const file = IS_ANDROID || shareBroken() ? null : shareableFile(blob, name);
   btn.classList.toggle('hidden', !file);
+  document.getElementById(hint).classList.toggle('hidden', !IS_ANDROID);
   btn.onclick = async () => {
-    try { await navigator.share({ files: [file], title: name }); }
-    catch (e) { if (e.name !== 'AbortError') alert(`Sharing didn’t work (${e.message}). Use “Download” instead.`); }
+    try {
+      await navigator.share({ files: [file], title: name });
+    } catch (e) {
+      if (e.name === 'AbortError') return;          // the user just closed the share sheet
+      try { localStorage.setItem('jwlm-share-broken', '1'); } catch (_) {}
+      btn.classList.add('hidden');
+      document.getElementById(hint).classList.remove('hidden');
+      document.getElementById(download).click();    // fall back to a normal download
+    }
   };
 }
 
