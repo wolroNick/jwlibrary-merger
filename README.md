@@ -68,12 +68,16 @@ Aplikacja wykonuje **próbne scalenie**, więc liczby w podsumowaniu to dokładn
 
 - **podsumowanie**: ile notatek, zaznaczeń, zakładek i tagów dojdzie ze starszych kopii;
 - **ostrzeżenia**, jeśli coś wymaga uwagi (patrz [Ostrzeżenia](#ostrzeżenia));
-- **tabelę konfliktów**, czyli notatek edytowanych inaczej na dwóch urządzeniach (patrz [Konflikty notatek](#konflikty-notatek));
+- **notatki edytowane inaczej na dwóch urządzeniach**: przy każdej obie wersje obok siebie i wybór, co zachować (patrz [Konflikty notatek](#konflikty-notatek));
 - **listę elementów dodawanych ze starszych kopii**, z polami wyboru i wyszukiwarką. **Odznacz to, czego nie chcesz**, np. notatki usunięte celowo (patrz [Usunięte elementy](#usunięte-elementy)).
 
 ### 3. Scalenie: „Merge & download”
 
-Aplikacja tworzy plik `RRRR-MM-DD_MERGED_URZĄDZENIA.jwlibrary` (np. `2026-11-18_MERGED_PHONE+TABLET.jwlibrary`), sprawdza spójność bazy i pokazuje przycisk **Download merged file**. Jeśli kontrola coś wykryje, na ekranie końcowym pojawi się żółte ostrzeżenie.
+Aplikacja tworzy plik `RRRR-MM-DD_MERGED_URZĄDZENIA.jwlibrary` (np. `2026-11-18_MERGED_PHONE+TABLET.jwlibrary`), sprawdza spójność bazy i **od razu go pobiera**. Przycisk **Download merged file** zostaje na wypadek, gdyby pobieranie się nie rozpoczęło. Jeśli kontrola coś wykryje, na ekranie końcowym pojawi się żółte ostrzeżenie.
+
+Przycisk **Review in Edit backup** otwiera wynik w zakładce edycji. Możesz go tam przejrzeć i uporządkować (np. usunąć niepotrzebne notatki „[Older version]”), a potem zapisać poprawioną wersję.
+
+Szczegółowy przebieg scalania jest pod **Details** w kroku 2; nad nim zawsze widać bieżący etap. Na telefonie przycisk **Merge & download** jest przyklejony do dołu ekranu.
 
 ### 4. Przywrócenie w JW Library
 
@@ -123,7 +127,7 @@ Usuwanie dba o spójność bazy. Razem z notatką znikają jej przypisania tagó
 | Dane | Jak są łączone |
 |---|---|
 | **Notatki** | po wewnętrznym identyfikatorze; przy różnej treści patrz [Konflikty notatek](#konflikty-notatek) |
-| **Zaznaczenia** (wraz z zakresami) | po wewnętrznym identyfikatorze zaznaczenia |
+| **Zaznaczenia** (wraz z zakresami) | po wewnętrznym identyfikatorze; ten sam fragment zaznaczony osobno na dwóch urządzeniach (to samo miejsce i ten sam zakres słów) trafia do wyniku **raz** |
 | **Zakładki** | publikacja ma 10 slotów; gdy slot jest zajęty, zakładka trafia do wolnego slotu tej publikacji |
 | **Tagi** i ich przypisania | tag o tej samej nazwie nie jest duplikowany; przypisania do notatek, miejsc (Ulubione) i playlist są przenoszone |
 | **Pola w zeszytach** | przy różnicy zostaje wartość z najnowszej kopii |
@@ -138,11 +142,15 @@ Elementy oznaczone na pomarańczowo jako **probably deleted** są w starszej kop
 
 ### Konflikty notatek
 
-Konflikt to ta sama notatka z **innym tytułem lub treścią** w kopiach z różnych urządzeń. Aplikacja **nie usuwa żadnej wersji**:
+Konflikt to ta sama notatka z **innym tytułem lub treścią** w kopiach z różnych urządzeń. W kroku 2 każda taka notatka ma kartę z obiema wersjami (z urządzeniem i datą edycji) i wyborem:
 
-1. Wersja **edytowana najpóźniej** (według daty zmiany samej notatki) zostaje jako właściwa notatka.
-2. Druga wersja jest dodawana jako osobna notatka z tytułem zaczynającym się od **`[Older version]`**.
-3. Później możesz porównać obie wersje i usunąć zbędną, w JW Library albo w zakładce **Edit backup**: wpisz w wyszukiwarce „Older version”.
+| Wybór | Wynik |
+|---|---|
+| **Both** (domyślnie) | wersja **edytowana najpóźniej** zostaje jako notatka, a druga jest dodawana jako osobna notatka z tytułem `[Older version] …`, więc nic nie ginie |
+| **Latest only** | zostaje tylko wersja edytowana najpóźniej |
+| **Other only** | zostaje tylko druga wersja |
+
+Przyciski **Both for all** i **Latest for all** ustawiają wybór dla wszystkich kart naraz. Notatki „[Older version]” możesz później porównać i usunąć, w JW Library albo w zakładce **Edit backup**: wpisz w wyszukiwarce „Older version”.
 
 Wcześniejsza wersja notatki z **tego samego** urządzenia nie jest konfliktem, tylko starszym stanem, i jest pomijana.
 
