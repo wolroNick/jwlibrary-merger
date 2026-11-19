@@ -739,6 +739,29 @@
   }
   .color-pick button.sel { border-color: var(--text); }
   .file-btn { position: relative; overflow: hidden; }
+  .list-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+  .list-actions { display: flex; gap: 0.4rem; }
+  .list-actions .btn.on { background: var(--accent-light); color: var(--accent); border-color: var(--accent-mid); }
+  .panel { border: 1px solid var(--accent-mid); background: var(--surface2); border-radius: var(--radius); padding: 0.85rem 1rem; margin-bottom: 0.75rem; }
+  .panel .seg-choice { margin: 0.4rem 0 0.75rem; }
+  .bulk-bar {
+    position: sticky; top: 72px; z-index: 4;
+    display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;
+    background: var(--surface); border: 1px solid var(--accent-mid); border-radius: var(--radius);
+    padding: 0.6rem 0.75rem; margin-bottom: 0.6rem; box-shadow: var(--shadow);
+  }
+  .bulk-bar .count { font-size: 0.8rem; font-weight: 600; margin-right: auto; }
+  .bulk-bar select.input { padding: 0.3rem 0.5rem; font-size: 0.8rem; }
+  .item.selectable { display: flex; gap: 0.7rem; align-items: flex-start; }
+  .item.selectable > input { margin-top: 0.2rem; flex-shrink: 0; width: 18px; height: 18px; }
+  .item.selectable > div { flex: 1; min-width: 0; }
+  .item.selected { border-color: var(--accent-mid); background: var(--accent-light); }
+  .check-card { border: 1px solid var(--border); background: var(--surface2); border-radius: var(--radius); padding: 0.85rem 1rem; margin-bottom: 0.6rem; }
+  .check-card .check-head { display: flex; justify-content: space-between; gap: 0.5rem; align-items: baseline; }
+  .check-card .check-count { font-family: 'SF Mono', 'Fira Code', monospace; font-weight: 700; font-size: 0.9rem; }
+  .check-card .check-count.zero { color: var(--success); font-weight: 500; font-size: 0.8rem; }
+  .check-card .check-desc { font-size: 0.78rem; color: var(--text2); margin: 0.3rem 0 0; line-height: 1.55; }
+  .check-card .check-list { font-size: 0.72rem; color: var(--text3); margin-top: 0.35rem; word-break: break-word; }
   #installBtn { margin-left: auto; }
   #installBtn + .tabs { margin-left: 0.5rem; }
 
@@ -909,6 +932,7 @@
       <button class="tab" data-mode="marks" onclick="edSetMode('marks')">Highlights</button>
       <button class="tab" data-mode="bookmarks" onclick="edSetMode('bookmarks')">Bookmarks</button>
       <button class="tab" data-mode="tags" onclick="edSetMode('tags')">Tags</button>
+      <button class="tab" data-mode="cleanup" onclick="edSetMode('cleanup')">Clean up</button>
       <button class="tab" data-mode="tables" onclick="edSetMode('tables')">Tables</button>
     </div>
 
@@ -917,9 +941,19 @@
         <input class="input grow" id="edFind" type="search" placeholder="Search…" oninput="edFindChanged()">
         <select class="input" id="edFilter" onchange="edList.shown = LIST_STEP; edRenderList()"></select>
       </div>
-      <div class="small muted" id="edListInfo" style="margin-bottom:0.5rem;"></div>
+      <div class="list-head">
+        <span class="small muted" id="edListInfo"></span>
+        <span class="list-actions">
+          <button class="btn btn-secondary btn-sm" id="edSelectBtn" onclick="edToggleSelect()">&#9745; Select</button>
+          <button class="btn btn-secondary btn-sm" id="edExportBtn" onclick="edToggleExport()">&#8681; Export…</button>
+        </span>
+      </div>
+      <div id="edExport" class="panel hidden"></div>
+      <div id="edBulk" class="bulk-bar hidden"></div>
       <div id="edList"></div>
     </div>
+
+    <div id="edCleanupMode" class="hidden"></div>
 
     <div id="edTablesMode" class="hidden">
     <div class="small muted" style="margin-bottom:0.75rem;">Raw database tables — for advanced edits.</div>
@@ -2398,6 +2432,7 @@ const MODES = {
         `SELECT tm.NoteId, t.TagId, t.Name FROM TagMap tm JOIN Tag t ON t.TagId = tm.TagId WHERE tm.NoteId IS NOT NULL${where1(id, 'tm.NoteId = ?').sql} ORDER BY t.Name COLLATE NOCASE`, w.p), 'NoteId') : new Map();
       return q(ed.db, 'SELECT * FROM Note WHERE 1' + w.sql, w.p).map(n => ({
         ...n, id: n.NoteId,
+        loc: locs.get(n.LocationId),
         label: locLabel(locs.get(n.LocationId), n.BlockType, n.BlockIdentifier),
         color: n.UserMarkId ? colors.get(n.UserMarkId) : undefined,
         tags: tags.get(n.NoteId) || [],
@@ -2594,11 +2629,17 @@ function addTagMap(tagId, col, id) {
 function edSetMode(mode) {
   edMode = mode;
   document.querySelectorAll('#edModes .tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-  const tables = mode === 'tables';
-  document.getElementById('edFriendly').classList.toggle('hidden', tables);
-  document.getElementById('edTablesMode').classList.toggle('hidden', !tables);
+  const special = mode === 'tables' || mode === 'cleanup';
+  document.getElementById('edFriendly').classList.toggle('hidden', special);
+  document.getElementById('edTablesMode').classList.toggle('hidden', mode !== 'tables');
+  document.getElementById('edCleanupMode').classList.toggle('hidden', mode !== 'cleanup');
   document.getElementById('edFind').value = '';
-  if (tables) edFillTables(edView?.table);
+  edSelecting = false;
+  edSel.clear();
+  document.getElementById('edExport').classList.add('hidden');
+  document.getElementById('edExportBtn').classList.toggle('hidden', mode !== 'notes');
+  if (mode === 'tables') edFillTables(edView?.table);
+  else if (mode === 'cleanup') edRenderCleanup();
   else edLoadList(true);
 }
 
@@ -2640,8 +2681,12 @@ function edRenderList() {
   document.getElementById('edListInfo').textContent =
     items.length === edList.all.length ? plural(items.length, name) : `${items.length} of ${plural(edList.all.length, name)}`;
   const list = document.getElementById('edList');
+  edRenderBulk(items);
   list.innerHTML = shown.length
-    ? shown.map(it => `<div class="item" data-id="${it.id}" onclick="edItemEdit(${it.id})">${M.card(it)}</div>`).join('') +
+    ? shown.map(it => edSelecting
+        ? `<div class="item selectable${edSel.has(it.id) ? ' selected' : ''}" data-id="${it.id}" onclick="edToggleItem(${it.id})">
+             <input type="checkbox" ${edSel.has(it.id) ? 'checked' : ''} tabindex="-1" aria-label="Select"><div>${M.card(it)}</div></div>`
+        : `<div class="item" data-id="${it.id}" onclick="edItemEdit(${it.id})">${M.card(it)}</div>`).join('') +
       (items.length > shown.length
         ? `<button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="edList.shown += LIST_STEP; edRenderList()">Show more (${items.length - shown.length} left)</button>`
         : '')
@@ -2700,7 +2745,359 @@ function edRefresh() {
   edCache = {};
   edRenderInfo();
   if (edMode === 'tables') edFillTables(edView?.table);
+  else if (edMode === 'cleanup') edRenderCleanup();
   else edLoadList(false);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SELECT SEVERAL ITEMS & ACT ON ALL OF THEM
+// ═══════════════════════════════════════════════════════════════════════════
+let edSelecting = false;
+const edSel = new Set();
+
+function edToggleSelect(on = !edSelecting) {
+  edSelecting = on;
+  edSel.clear();
+  document.getElementById('edExport').classList.add('hidden');
+  edRenderList();
+}
+
+function edToggleItem(id) {
+  if (edSel.has(id)) edSel.delete(id); else edSel.add(id);
+  edRenderList();
+}
+
+function edSelectAllShown() {
+  edFiltered().forEach(it => edSel.add(it.id));
+  edRenderList();
+}
+
+function edRenderBulk(filtered) {
+  const bar = document.getElementById('edBulk');
+  document.getElementById('edSelectBtn').classList.toggle('on', edSelecting);
+  document.getElementById('edSelectBtn').innerHTML = edSelecting ? '&#10005; Done' : '&#9745; Select';
+  bar.classList.toggle('hidden', !edSelecting);
+  if (!edSelecting) return;
+  const n = edSel.size, none = n ? '' : 'disabled';
+  let actions = '';
+  if (edMode === 'notes' && has('Tag', 'TagMap')) {
+    const opts = userTags().filter(t => t.Type !== 0).map(t => `<option value="${t.TagId}">${escHtml(t.Name)}</option>`).join('');
+    actions += `<select class="input" id="edBulkTag" ${none}><option value="">Tag…</option>${opts}<option value="new">+ New tag…</option></select>
+      <button class="btn btn-secondary btn-sm" onclick="edBulkTag(true)" ${none}>Add tag</button>
+      <button class="btn btn-secondary btn-sm" onclick="edBulkTag(false)" ${none}>Remove tag</button>`;
+  }
+  if (edMode === 'marks') {
+    actions += `<select class="input" id="edBulkColor" ${none}><option value="">Colour…</option>${[1, 2, 3, 4, 5, 6]
+      .map(c => `<option value="${c}">${MARK_COLOR_NAMES[c]}</option>`).join('')}</select>
+      <button class="btn btn-secondary btn-sm" onclick="edBulkColor()" ${none}>Set colour</button>`;
+  }
+  bar.innerHTML = `
+    <span class="count">${n} selected</span>
+    <button class="btn btn-secondary btn-sm" onclick="edSelectAllShown()">Select all ${filtered.length}</button>
+    ${n ? '<button class="btn btn-secondary btn-sm" onclick="edSel.clear(); edRenderList()">Clear</button>' : ''}
+    ${actions}
+    <button class="btn btn-danger btn-sm" onclick="edBulkDelete()" ${none}>Delete</button>`;
+}
+
+const MODE_NOUN = { notes: 'note', marks: 'highlight', bookmarks: 'bookmark', tags: 'tag' };
+const MODE_TABLE = { notes: ['Note', 'NoteId'], marks: ['UserMark', 'UserMarkId'], bookmarks: ['Bookmark', 'BookmarkId'], tags: ['Tag', 'TagId'] };
+
+function edBulkDone(msg) {
+  edSel.clear();
+  edSetDirty();
+  edRefresh();
+  edMsg(msg);
+}
+
+function edBulkDelete() {
+  const items = edList.all.filter(it => edSel.has(it.id));
+  const noun = MODE_NOUN[edMode];
+  if (!items.length || !confirm(`Delete ${plural(items.length, noun)}? You can undo all changes with “Discard all changes” until you save.`)) return;
+  const [table, pk] = MODE_TABLE[edMode];
+  let done = 0; const failed = [];
+  for (const it of items) {
+    if (edMode === 'tags' && it.Type === 0) { failed.push(`${it.Name}: built-in tag`); continue; }
+    try { deleteWithCascade(table, [pk], it); done++; }
+    catch (e) { failed.push(e.message); }
+  }
+  edBulkDone(`Deleted ${plural(done, noun)}.` + (failed.length ? `<br>${plural(failed.length, 'item')} not deleted: ${escHtml(failed[0])}` : ''));
+}
+
+function edBulkTag(add) {
+  let v = document.getElementById('edBulkTag').value;
+  if (!v) { alert('Choose a tag first.'); return; }
+  const ids = [...edSel];
+  ed.db.run('BEGIN');
+  try {
+    let tagId;
+    if (v === 'new') {
+      if (!add) { ed.db.run('ROLLBACK'); return; }
+      const name = (prompt('Name of the new tag:') || '').trim();
+      if (!name) { ed.db.run('ROLLBACK'); return; }
+      tagId = ensureTag(name);
+    } else tagId = Number(v);
+    let changed = 0;
+    for (const id of ids) {
+      const hasIt = q1(ed.db, 'SELECT 1 FROM TagMap WHERE TagId = ? AND NoteId = ?', [tagId, id]);
+      if (add && !hasIt) { addTagMap(tagId, 'NoteId', id); changed++; }
+      if (!add && hasIt) { ed.db.run('DELETE FROM TagMap WHERE TagId = ? AND NoteId = ?', [tagId, id]); changed++; }
+    }
+    ed.db.run('COMMIT');
+    const name = q1(ed.db, 'SELECT Name FROM Tag WHERE TagId = ?', [tagId]);
+    edBulkDone(`${add ? 'Added' : 'Removed'} tag “${escHtml(name)}” ${add ? 'to' : 'from'} ${plural(changed, 'note')}.`);
+  } catch (e) {
+    try { ed.db.run('ROLLBACK'); } catch (_) {}
+    edMsg(escHtml('Not changed: ' + e.message), 'alert-err');
+  }
+}
+
+function edBulkColor() {
+  const c = Number(document.getElementById('edBulkColor').value);
+  if (!c) { alert('Choose a colour first.'); return; }
+  const ids = [...edSel];
+  ed.db.run('BEGIN');
+  for (const id of ids) ed.db.run('UPDATE UserMark SET ColorIndex = ? WHERE UserMarkId = ?', [c, id]);
+  ed.db.run('COMMIT');
+  edBulkDone(`${plural(ids.length, 'highlight')} set to ${MARK_COLOR_NAMES[c]}.`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXPORT NOTES (printable page / HTML / CSV)
+// ═══════════════════════════════════════════════════════════════════════════
+function edToggleExport() {
+  const box = document.getElementById('edExport');
+  const open = box.classList.contains('hidden');
+  if (open) edToggleSelect(false);
+  box.classList.toggle('hidden', !open);
+  if (!open) return;
+  const all = edList.all.length, shown = edFiltered().length;
+  box.innerHTML = `
+    <div class="item-title">Export notes</div>
+    <div class="small muted" style="margin-top:0.2rem;">Grouped by Bible book or publication, with tags and highlight colours.</div>
+    <div class="seg-choice">
+      <label><input type="radio" name="edExpScope" value="all" checked>All notes (${all})</label>
+      ${shown !== all ? `<label><input type="radio" name="edExpScope" value="shown">Only the ${shown} matching the search/filter</label>` : ''}
+    </div>
+    <div class="actions" style="margin-top:0;">
+      <button class="btn btn-primary btn-sm" onclick="edExport('print')">&#128438; Print / PDF</button>
+      <button class="btn btn-secondary btn-sm" onclick="edExport('html')">HTML file</button>
+      <button class="btn btn-secondary btn-sm" onclick="edExport('csv')">CSV (Excel)</button>
+    </div>
+    <div class="small muted" style="margin-top:0.6rem;">“Print / PDF” opens the notes as a page — use the browser’s Print to print them or save them as a PDF.</div>`;
+}
+
+function exportGroup(n) {
+  const l = n.loc;
+  if (!l) return { key: 'zzz', title: 'Notes without a place' };
+  if (l.BookNumber) return { key: `0|${String(l.BookNumber).padStart(3, '0')}`, title: BIBLE_BOOKS[l.BookNumber - 1] || `Book ${l.BookNumber}` };
+  const name = [l.KeySymbol && pubName(l.KeySymbol), l.IssueTagNumber ? fmtIssue(l.IssueTagNumber) : null].filter(Boolean).join(' ') || l.Title || 'Other';
+  return { key: `1|${name}`, title: name };
+}
+
+// Notes in reading order: Bible books in canonical order, then publications A–Z.
+function exportNotes(scope) {
+  const list = scope === 'shown' ? edFiltered() : edList.all;
+  return list.map(n => ({ n, g: exportGroup(n) })).sort((a, b) =>
+    COLLATOR.compare(a.g.key, b.g.key)
+    || (a.n.loc?.ChapterNumber ?? 0) - (b.n.loc?.ChapterNumber ?? 0)
+    || (a.n.BlockIdentifier ?? 0) - (b.n.BlockIdentifier ?? 0)
+    || COLLATOR.compare(a.n.Title || '', b.n.Title || ''));
+}
+
+function downloadBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+}
+
+function edExport(kind) {
+  const scope = document.querySelector('input[name="edExpScope"]:checked')?.value || 'all';
+  const rows = exportNotes(scope);
+  const device = ed.manifest.userDataBackup?.deviceName || '';
+  const stamp = new Date().toISOString().slice(0, 10);
+  const base = `${stamp}_${safeFileName(device)}_notes`;
+  if (kind === 'csv') {
+    const cell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const head = ['Book / publication', 'Place', 'Title', 'Content', 'Tags', 'Highlight', 'Created', 'Modified'];
+    const lines = [head, ...rows.map(({ n, g }) => [g.title, n.label, n.Title, n.Content, n.tags.map(t => t.Name).join(', '),
+      n.color !== undefined ? MARK_COLOR_NAMES[n.color] ?? '' : '', n.Created, n.LastModified])];
+    // Semicolons + BOM: opens correctly in Excel with Polish (and most European) settings.
+    const csv = '﻿' + lines.map(r => r.map(cell).join(';')).join('\r\n');
+    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), base + '.csv');
+    return;
+  }
+  const html = exportHtml(rows, device);
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  if (kind === 'html') { downloadBlob(blob, base + '.html'); return; }
+  const w = window.open(URL.createObjectURL(blob), '_blank');
+  if (!w) downloadBlob(blob, base + '.html');   // pop-up blocked → save the file instead
+}
+
+function exportHtml(rows, device) {
+  let body = '', lastGroup = null;
+  for (const { n, g } of rows) {
+    if (g.title !== lastGroup) { body += `<h2>${escHtml(g.title)}</h2>`; lastGroup = g.title; }
+    const color = n.color !== undefined ? MARK_COLORS[n.color] : null;
+    body += `<article style="border-left-color:${color && color !== 'transparent' ? color : '#d4d4d8'}">
+      <h3>${escHtml(n.Title || '(no title)')}</h3>
+      <div class="meta">${escHtml(n.label)} · ${escHtml(fmtDate(n.LastModified))}</div>
+      ${n.Content ? `<div class="content">${escHtml(n.Content)}</div>` : ''}
+      ${n.tags.length ? `<div class="tags">${n.tags.map(t => `<span>${escHtml(t.Name)}</span>`).join('')}</div>` : ''}
+    </article>`;
+  }
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notes${device ? ' — ' + escHtml(device) : ''}</title>
+<style>
+  body { font: 15px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #18181b; background: #fff; max-width: 760px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  .sub { color: #52525b; font-size: .85rem; margin-bottom: 1.5rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 .5rem; padding-bottom: .3rem; border-bottom: 2px solid #e4e4e7; }
+  article { border-left: 5px solid #d4d4d8; padding: .2rem 0 .2rem .8rem; margin: 1rem 0; break-inside: avoid; }
+  h3 { font-size: 1rem; margin: 0; }
+  .meta { color: #52525b; font-size: .78rem; margin: .1rem 0 .35rem; }
+  .content { white-space: pre-line; }
+  .tags { margin-top: .4rem; } .tags span { display: inline-block; font-size: .72rem; border: 1px solid #a1a1aa; border-radius: 99px; padding: 0 .5rem; margin: 0 .25rem .25rem 0; }
+  .bar { position: sticky; top: 0; background: #fff; padding: .5rem 0; margin-bottom: 1rem; border-bottom: 1px solid #e4e4e7; }
+  .bar button { font: inherit; padding: .45rem 1rem; border-radius: 8px; border: 1px solid #18794e; background: #18794e; color: #fff; cursor: pointer; }
+  @media print { .bar { display: none; } body { padding: 0; } }
+</style></head><body>
+<div class="bar"><button onclick="print()">Print / Save as PDF</button></div>
+<h1>Notes</h1>
+<div class="sub">${plural(rows.length, 'note')}${device ? ' · ' + escHtml(device) : ''} · exported ${escHtml(new Date().toLocaleDateString())}</div>
+${body || '<p>No notes.</p>'}
+</body></html>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CLEAN UP: find and fix leftovers in a backup
+// ═══════════════════════════════════════════════════════════════════════════
+const rangeSigOf = list => (list || []).map(r => `${r.BlockType}:${r.Identifier}:${r.StartToken}:${r.EndToken}`).sort().join(',');
+
+// Each check: find() → array of things to fix; fix(found) → message.
+const CLEANUP = [
+  {
+    id: 'older', title: '“[Older version]” notes',
+    desc: 'Second versions of notes edited on two devices, added when merging. Review them and delete the ones you no longer need.',
+    find: () => has('Note') ? q(ed.db, "SELECT NoteId, Title FROM Note WHERE Title LIKE '[Older version]%'") : [],
+    label: r => r.Title, review: true,
+    fix: rows => { rows.forEach(r => deleteWithCascade('Note', ['NoteId'], r)); return `Deleted ${plural(rows.length, 'note')}.`; },
+  },
+  {
+    id: 'empty', title: 'Empty notes',
+    desc: 'Notes with no title and no text. Deleting them keeps the highlights they are attached to.',
+    find: () => has('Note') ? q(ed.db, "SELECT NoteId FROM Note WHERE TRIM(IFNULL(Title, '')) = '' AND TRIM(IFNULL(Content, '')) = ''") : [],
+    fix: rows => { rows.forEach(r => deleteWithCascade('Note', ['NoteId'], r)); return `Deleted ${plural(rows.length, 'empty note')}.`; },
+  },
+  {
+    id: 'dupmarks', title: 'Duplicate highlights',
+    desc: 'The same words highlighted more than once in the same place (e.g. after merging with an older version of this app). One is kept; notes attached to the others are moved to it.',
+    find: () => {
+      if (!has('UserMark', 'BlockRange')) return [];
+      const ranges = groupBy(q(ed.db, 'SELECT * FROM BlockRange'), 'UserMarkId');
+      const noted = new Set(has('Note') ? q(ed.db, 'SELECT UserMarkId FROM Note WHERE UserMarkId IS NOT NULL').map(r => r.UserMarkId) : []);
+      const groups = groupBy(q(ed.db, 'SELECT UserMarkId, LocationId FROM UserMark').map(m => ({ ...m, spot: `${m.LocationId}|${rangeSigOf(ranges.get(m.UserMarkId))}` }))
+        .filter(m => !m.spot.endsWith('|')), 'spot');
+      const out = [];
+      for (const list of groups.values()) {
+        if (list.length < 2) continue;
+        list.sort((a, b) => (noted.has(b.UserMarkId) - noted.has(a.UserMarkId)) || a.UserMarkId - b.UserMarkId);
+        for (const dup of list.slice(1)) out.push({ UserMarkId: dup.UserMarkId, keep: list[0].UserMarkId });
+      }
+      return out;
+    },
+    fix: rows => {
+      for (const r of rows) {
+        if (has('Note')) ed.db.run('UPDATE Note SET UserMarkId = ? WHERE UserMarkId = ?', [r.keep, r.UserMarkId]);
+        deleteWithCascade('UserMark', ['UserMarkId'], r);
+      }
+      return `Removed ${plural(rows.length, 'duplicate highlight')}.`;
+    },
+  },
+  {
+    id: 'tags', title: 'Unused tags',
+    desc: 'Your own tags that aren’t on any note or place.',
+    find: () => has('Tag', 'TagMap') ? q(ed.db, 'SELECT TagId, Name FROM Tag WHERE Type = 1 AND TagId NOT IN (SELECT TagId FROM TagMap)') : [],
+    label: r => r.Name,
+    fix: rows => { rows.forEach(r => deleteWithCascade('Tag', ['TagId'], r)); return `Deleted ${plural(rows.length, 'unused tag')}.`; },
+  },
+  {
+    id: 'broken', title: 'Broken links',
+    desc: 'Records pointing to something that no longer exists. Optional links are cleared; records that can’t exist without the missing data are removed.',
+    find: () => q(ed.db, 'PRAGMA foreign_key_check').filter(r => r.rowid !== null && r.rowid !== undefined),
+    label: r => `${r.table} → ${r.parent}`,
+    fix: rows => {
+      let fixed = 0;
+      for (let pass = 0; pass < 3 && rows.length; pass++) {
+        for (const r of rows) {
+          const fk = q(ed.db, `PRAGMA foreign_key_list("${r.table}")`).find(k => k.id === r.fkid);
+          const col = q(ed.db, `PRAGMA table_info("${r.table}")`).find(c => c.name === fk?.from);
+          if (!fk || !col) continue;
+          if (!col.notnull) ed.db.run(`UPDATE "${r.table}" SET "${fk.from}" = NULL WHERE rowid = ?`, [r.rowid]);
+          else {
+            const row = q(ed.db, `SELECT rowid AS "rowid", * FROM "${r.table}" WHERE rowid = ?`, [r.rowid])[0];
+            if (!row) continue;
+            const pk = q(ed.db, `PRAGMA table_info("${r.table}")`).filter(c => c.pk).map(c => c.name);
+            if (CASCADE[r.table] && pk.length === 1) deleteWithCascade(r.table, pk, row);
+            else ed.db.run(`DELETE FROM "${r.table}" WHERE rowid = ?`, [r.rowid]);
+          }
+          fixed++;
+        }
+        rows = CLEANUP.find(c => c.id === 'broken').find();
+      }
+      return `Fixed ${plural(fixed, 'broken link')}.` + (rows.length ? ` ${rows.length} could not be fixed automatically.` : '');
+    },
+  },
+];
+
+let cleanupFound = {};
+function edRenderCleanup() {
+  const box = document.getElementById('edCleanupMode');
+  cleanupFound = Object.fromEntries(CLEANUP.map(c => [c.id, c.find()]));
+  const total = Object.values(cleanupFound).reduce((s, r) => s + r.length, 0);
+  box.innerHTML = `
+    <div class="small muted" style="margin-bottom:0.75rem;">${total
+      ? 'Checks for leftovers in this backup. Nothing changes until you press a button — and you can still undo everything with “Discard all changes”.'
+      : '&#10003; This backup looks tidy — nothing to clean up.'}</div>` +
+    CLEANUP.map(c => {
+      const found = cleanupFound[c.id];
+      const sample = c.label && found.length ? found.slice(0, 5).map(r => escHtml(c.label(r) || '(no title)')).join(' · ') + (found.length > 5 ? ' …' : '') : '';
+      return `<div class="check-card">
+        <div class="check-head"><span class="item-title">${c.title}</span>
+          <span class="check-count${found.length ? '' : ' zero'}">${found.length || '&#10003; none'}</span></div>
+        <div class="check-desc">${c.desc}</div>
+        ${sample ? `<div class="check-list">${sample}</div>` : ''}
+        ${found.length ? `<div class="actions" style="margin-top:0.6rem;">
+          ${c.review ? `<button class="btn btn-secondary btn-sm" onclick="edReviewOlder()">Review</button>` : ''}
+          <button class="btn btn-danger btn-sm" onclick="edCleanupFix('${c.id}')">${c.id === 'broken' ? 'Fix' : c.id === 'dupmarks' ? 'Remove duplicates' : 'Delete all'}</button>
+        </div>` : ''}
+      </div>`;
+    }).join('');
+}
+
+function edCleanupFix(id) {
+  const c = CLEANUP.find(x => x.id === id);
+  const found = cleanupFound[id] || [];
+  if (!found.length || !confirm(`${c.title}: fix ${found.length}?\n\nYou can undo this with “Discard all changes” until you save.`)) return;
+  try {
+    const msg = c.fix(found);
+    edSetDirty();
+    edRefresh();
+    edMsg(msg);
+  } catch (e) {
+    edMsg(escHtml('Clean-up failed: ' + e.message), 'alert-err');
+    edRefresh();
+  }
+}
+
+// Opens the notes list filtered to “[Older version]” notes, ready to select and delete.
+function edReviewOlder() {
+  edSetMode('notes');
+  document.getElementById('edFind').value = 'Older version';
+  edList.shown = LIST_STEP;
+  edToggleSelect(true);
 }
 
 // ── save / export ───────────────────────────────────────────────────────────
