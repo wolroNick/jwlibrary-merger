@@ -110,9 +110,43 @@ Stuknij element na liście, żeby go edytować. Zmiany są trzymane w pamięci d
 | **Highlights** | filtrować po kolorze, zmieniać kolor, usuwać zaznaczenia (przypięta notatka zostaje) |
 | **Bookmarks** | zmieniać tytuł i fragment, usuwać zakładki |
 | **Tags** | zmieniać nazwy, usuwać tagi (notatki zostają). Wbudowany tag Ulubione jest chroniony |
+| **Clean up** | porządki w kopii (patrz niżej) |
 | **Tables** | dla zaawansowanych: dowolna tabela bazy i konsola SQL |
 
 Usuwanie dba o spójność bazy. Razem z notatką znikają jej przypisania tagów, a razem z zaznaczeniem jego zakresy. Rekordu, którego używają inne dane (np. miejsca w publikacji z notatkami), nie da się usunąć.
+
+#### Zaznaczanie wielu elementów
+
+Przycisk **Select** nad listą włącza zaznaczanie: stukasz elementy, a u góry pojawia się pasek z działaniami dla zaznaczonych.
+
+- **Select all N** zaznacza wszystko, co pasuje do bieżącego wyszukiwania i filtra, także elementy jeszcze niewyświetlone.
+- **Notatki**: **Add tag** i **Remove tag** (także nowy tag), **Delete**.
+- **Zaznaczenia**: **Set colour**, **Delete**.
+- **Zakładki i tagi**: **Delete**.
+
+Przykład: wpisz w wyszukiwarce „Older version”, kliknij **Select**, potem **Select all**, a na koniec **Delete**.
+
+#### Eksport notatek
+
+W trybie **Notes** przycisk **Export…** zapisuje notatki w czytelnej postaci: wszystkie albo tylko te pasujące do wyszukiwania i filtra. Notatki są pogrupowane według ksiąg biblijnych (w kolejności kanonicznej) i publikacji, razem z miejscem, tagami, kolorem zaznaczenia i datą.
+
+- **Print / PDF**: otwiera notatki jako stronę. Przyciskiem na górze strony albo poleceniem drukowania w przeglądarce możesz je wydrukować lub zapisać jako PDF.
+- **HTML file**: ta sama strona jako plik, który otworzysz w dowolnej przeglądarce.
+- **CSV (Excel)**: tabela do arkusza kalkulacyjnego. Pola są rozdzielone średnikami, więc plik otwiera się poprawnie w Excelu z polskimi ustawieniami.
+
+#### Porządki (Clean up)
+
+Tryb **Clean up** sprawdza kopię i pokazuje, ile znalazł każdego rodzaju problemu. Nic się nie zmienia, dopóki nie naciśniesz przycisku.
+
+| Sprawdzenie | Co robi naprawa |
+|---|---|
+| **„[Older version]” notes** | usuwa wszystkie; przycisk **Review** pokazuje je najpierw na liście, gotowe do zaznaczenia |
+| **Empty notes** | usuwa notatki bez tytułu i treści (zaznaczenia zostają) |
+| **Duplicate highlights** | zostawia jedno z kilku identycznych zaznaczeń; notatki z pozostałych są przepinane na nie |
+| **Unused tags** | usuwa Twoje tagi, które nie są przypisane do niczego |
+| **Broken links** | czyści odwołania do nieistniejących danych albo usuwa rekordy, które bez nich nie mogą istnieć |
+
+Wszystkie zmiany (także działania zbiorcze i porządki) można cofnąć przyciskiem **Discard all changes**, dopóki nie zapiszesz pliku.
 
 ### 3. Zapisz
 
@@ -179,6 +213,9 @@ Tak ma być, bo Chrome na Androidzie nie pozwala stronom udostępniać plików `
 
 **…po scaleniu wróciły notatki, które usunąłem.**
 Scal jeszcze raz z oryginalnych kopii i w kroku 2 odznacz te elementy. Możesz też usunąć je w zakładce **Edit backup** w gotowym pliku.
+
+**…chcę wydrukować notatki albo mieć je w Excelu.**
+W zakładce **Edit backup**, w trybie **Notes**, użyj przycisku **Export…** (szczegóły w sekcji [Eksport notatek](#eksport-notatek)).
 
 **…pojawiły się notatki „[Older version] …”.**
 To drugie wersje notatek edytowanych na dwóch urządzeniach. Porównaj je z właściwymi notatkami i usuń zbędne.
