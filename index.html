@@ -583,6 +583,29 @@
   .pick-row .pick-main { word-break: break-word; }
   .pick-row .pick-sub { font-size: 0.7rem; color: var(--text3); margin-top: 0.1rem; }
   .conflict-table td.wrap { white-space: normal; max-width: 260px; }
+  #statusLine { margin-top: -0.5rem; min-height: 1.2em; }
+  .log-details { margin-top: 0.5rem; }
+  .log-details summary { color: var(--text3); cursor: pointer; padding: 0.25rem 0; }
+  .log-details .log-box { margin-top: 0.4rem; }
+  .conflict-list { display: flex; flex-direction: column; gap: 0.6rem; max-height: 520px; overflow-y: auto; }
+  .conflict-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); padding: 0.75rem 0.85rem; }
+  .conflict-versions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0.5rem 0; }
+  @media (max-width: 560px) { .conflict-versions { grid-template-columns: 1fr; } }
+  .conflict-version { font-size: 0.78rem; border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.6rem; background: var(--surface); }
+  .conflict-version .cv-head { font-size: 0.68rem; color: var(--text3); font-family: 'SF Mono', 'Fira Code', monospace; margin-bottom: 0.25rem; }
+  .conflict-version .cv-body { white-space: pre-line; word-break: break-word; max-height: 8.5em; overflow-y: auto; color: var(--text2); }
+  .seg-choice { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .seg-choice label { font-size: 0.75rem; padding: 0.3rem 0.7rem; border-radius: 20px; cursor: pointer;
+    border: 1px solid var(--border2); color: var(--text2); background: var(--surface); display: inline-flex; align-items: center; }
+  .seg-choice label:has(input:checked) { background: var(--accent-light); color: var(--accent); border-color: var(--accent-mid); font-weight: 600; }
+  .seg-choice input { display: none; }
+  @media (max-width: 560px) {
+    .sticky-actions {
+      position: sticky; bottom: 0; z-index: 5;
+      background: var(--surface); margin: 1rem -1.1rem -1.1rem; padding: 0.75rem 1.1rem;
+      border-top: 1px solid var(--border); border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    }
+  }
   .badge-dup { color: var(--text3); }
 
   /* Tabs */
@@ -780,7 +803,11 @@
       </div>
     </div>
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-    <div class="log-box" id="logBox"></div>
+    <div class="small muted" id="statusLine"></div>
+    <details id="logDetails" class="log-details">
+      <summary class="small">Details</summary>
+      <div class="log-box" id="logBox"></div>
+    </details>
     <div id="warnArea"></div>
     <div id="summaryArea" class="hidden">
       <hr>
@@ -788,16 +815,15 @@
       <div id="conflictArea" class="hidden">
         <hr>
         <div class="step-title" style="font-size:0.88rem;">Notes edited differently on two devices</div>
-        <div class="small muted" style="margin:0.25rem 0 0.5rem;">
-          The most recently edited version stays as the note. The other one is kept as a separate note
-          titled “[Older version] …”, so nothing is lost — you can compare and delete it later in JW Library.
+        <div class="small muted" style="margin:0.25rem 0 0.5rem; line-height:1.6;">
+          Choose what to keep for each note. <b>Both</b> (default): the latest edit stays as the note and the other
+          version is added as “[Older version] …”, so nothing is lost.
         </div>
-        <div style="overflow:auto; max-height:300px;">
-          <table class="conflict-table" id="conflictTable">
-            <thead><tr><th>Note</th><th>Kept as the note</th><th>Saved as [Older version]</th></tr></thead>
-            <tbody></tbody>
-          </table>
+        <div class="pick-tools">
+          <button class="btn btn-secondary btn-sm" onclick="setAllConflicts('both')">Both for all</button>
+          <button class="btn btn-secondary btn-sm" onclick="setAllConflicts('latest')">Latest for all</button>
         </div>
+        <div id="conflictList" class="conflict-list"></div>
       </div>
       <div id="pickArea" class="hidden">
         <hr>
@@ -810,7 +836,7 @@
         <input class="input" id="pickFind" type="search" placeholder="Search these items…" oninput="filterPicks()" style="width:100%;">
         <div id="pickGroups"></div>
       </div>
-      <div class="actions">
+      <div class="actions sticky-actions">
         <button class="btn btn-primary" id="mergeBtn" onclick="doMerge()">Merge &amp; download</button>
         <button class="btn btn-secondary" onclick="reset()">Start over</button>
       </div>
@@ -830,8 +856,11 @@
     <div class="actions">
       <a class="btn btn-download" id="downloadLink" download>&#8659; Download merged file</a>
       <button class="btn btn-secondary hidden" id="shareBtn">&#8679; Share…</button>
+      <button class="btn btn-secondary" onclick="openMergedInEditor()">&#9998; Review in Edit backup</button>
       <button class="btn btn-secondary" onclick="reset()">Merge more files</button>
     </div>
+    <div class="small muted" style="margin-top:0.6rem;">The download starts automatically — if it didn’t, use the button above.
+      To check or tidy up the result first (e.g. the “[Older version]” notes), open it in <b>Edit backup</b>.</div>
     <div class="small muted hidden" id="shareHint" style="margin-top:0.6rem; line-height:1.6;">
       <b>On a phone</b> the file is saved to <b>Downloads</b>. In JW Library go to Settings &rarr; Backup and restore &rarr; Restore and pick it there —
       or open it in the <b>Files</b> app and tap Share &rarr; JW Library (or Google Drive).
@@ -1120,6 +1149,9 @@ function invalidateAnalysis() {
 }
 
 function log(msg, cls='') {
+  // The full log sits under "Details"; the latest top-level line is shown as the status.
+  if (!msg.startsWith(' ') && msg !== '---') document.getElementById('statusLine').textContent = msg;
+  if (cls === 'err') document.getElementById('logDetails').open = true;
   const box = document.getElementById('logBox');
   const line = document.createElement('div');
   line.className = 'log-line' + (cls ? ' ' + cls : '');
@@ -1164,8 +1196,9 @@ function newGuid(like) {
 const newerThan = (a, b) => (validDate(a)?.getTime() ?? 0) > (validDate(b)?.getTime() ?? 0);
 const OLDER_PREFIX = '[Older version] ';
 
-async function runMerge(files, { overrides = new Map(), progress = () => {} } = {}) {
+async function runMerge(files, { overrides = new Map(), conflictChoices = new Map(), progress = () => {} } = {}) {
   // overrides: candidate key → true/false where the user changed the default.
+  // conflictChoices: conflict key → 'both' (default) | 'latest' | 'other'.
   const want = (key, deleted) => overrides.has(key) ? overrides.get(key) : !deleted;
   let curFi = 0, done = 0, total = 1, lastYield = performance.now();
   const tick = async () => {
@@ -1181,9 +1214,10 @@ async function runMerge(files, { overrides = new Map(), progress = () => {} } = 
   const res = {
     db: out, errors: [], conflicts: [], candidates: [],
     added: { notes: 0, marks: 0, bookmarks: 0, tags: 0, tagMaps: 0, inputFields: 0, playlistItems: 0, media: 0 },
-    bookmarkMoved: 0, bookmarkNoSlot: 0, oldVersions: 0,
+    bookmarkMoved: 0, bookmarkNoSlot: 0, oldVersions: 0, dupMarks: 0,
   };
   const seenCandidates = new Set();
+  const noteFrom = new Map();     // note Guid → device whose text is in the result now
   const oldVersionSeen = new Set();
 
   // What each file contains — used to spot items deleted on purpose.
@@ -1294,10 +1328,25 @@ async function runMerge(files, { overrides = new Map(), progress = () => {} } = 
     if (has(src, 'UserMark') && has(out, 'UserMark')) {
       const guidToId = new Map(q(out, 'SELECT UserMarkId, UserMarkGuid FROM UserMark').map(r => [r.UserMarkGuid, r.UserMarkId]));
       const ranges = has(src, 'BlockRange') ? groupBy(q(src, 'SELECT * FROM BlockRange'), 'UserMarkId') : new Map();
+      // The same text highlighted separately on two devices gets two different GUIDs.
+      // Highlights covering exactly the same place and words are treated as one.
+      const rangeSig = list => (list || []).map(r => `${r.BlockType}:${r.Identifier}:${r.StartToken}:${r.EndToken}`).sort().join(',');
+      const bySpot = new Map();
+      if (has(out, 'BlockRange')) {
+        const outRanges = groupBy(q(out, 'SELECT * FROM BlockRange'), 'UserMarkId');
+        for (const um of q(out, 'SELECT UserMarkId, LocationId FROM UserMark')) {
+          const rs = rangeSig(outRanges.get(um.UserMarkId));
+          if (rs) bySpot.set(`${um.LocationId}|${rs}`, um.UserMarkId);
+        }
+      }
       for (const m of q(src, 'SELECT * FROM UserMark')) {
         await tick();
         const existing = guidToId.get(m.UserMarkGuid);
         if (existing !== undefined) { markMap.set(m.UserMarkId, existing); continue; }
+        const rs = rangeSig(ranges.get(m.UserMarkId));
+        const spotLoc = rs ? mapLoc(m.LocationId, false) : null;
+        const twin = spotLoc !== null ? bySpot.get(`${spotLoc}|${rs}`) : undefined;
+        if (twin !== undefined) { markMap.set(m.UserMarkId, twin); res.dupMarks++; continue; }
         const key = `M:${m.UserMarkGuid}`, del = deletedOn(fi, 'marks', m.UserMarkGuid);
         candidate(key, {
           kind: 'marks', color: m.ColorIndex, label: rangeLabel(srcLocs.get(m.LocationId), ranges.get(m.UserMarkId)),
@@ -1308,6 +1357,7 @@ async function runMerge(files, { overrides = new Map(), progress = () => {} } = 
         if (id === null) continue;
         markMap.set(m.UserMarkId, id);
         guidToId.set(m.UserMarkGuid, id);
+        if (rs) bySpot.set(`${mapLoc(m.LocationId)}|${rs}`, id);
         res.added.marks++;
         for (const br of ranges.get(m.UserMarkId) || []) insertRow('BlockRange', br, { UserMarkId: () => id }, 'BlockRangeId');
       }
@@ -1325,21 +1375,28 @@ async function runMerge(files, { overrides = new Map(), progress = () => {} } = 
           if (supersededOnSameDevice(fi, 'notes', n.Guid)) continue;
           const cur = q(out, 'SELECT * FROM Note WHERE NoteId = ?', [tid])[0];
           if ((cur.Title ?? '') === (n.Title ?? '') && (cur.Content ?? '') === (n.Content ?? '')) continue;
-          // Edited differently on two devices: the most recently edited text wins.
+          // Edited differently on two devices. By default the most recently edited text
+          // stays as the note and the other one is kept as “[Older version] …”;
+          // the user can also keep only one of them.
           const srcWins = newerThan(n.LastModified, cur.LastModified);
-          if (srcWins) {
+          const winner = srcWins ? n : cur, loser = srcWins ? cur : n;
+          const curFrom = noteFrom.get(n.Guid) ?? base.device;
+          const ckey = `C:${n.Guid}#${fi}`;
+          const choice = conflictChoices.get(ckey) ?? 'both';
+          const version = (x, from) => ({ title: x.Title || '', content: x.Content || '', date: x.LastModified, from });
+          res.conflicts.push({
+            key: ckey, title: winner.Title || loser.Title || '(no title)',
+            latest: version(winner, srcWins ? f.device : curFrom),
+            other: version(loser, srcWins ? curFrom : f.device),
+          });
+          const keep = choice === 'other' ? loser : winner;      // the text that stays as the note
+          if (keep === n) {
             out.run('UPDATE Note SET Title = ?, Content = ?, LastModified = ? WHERE NoteId = ?',
               [n.Title, n.Content, n.LastModified, tid]);
+            noteFrom.set(n.Guid, f.device);
           }
-          const loser = srcWins ? cur : n;
+          if (choice !== 'both') continue;
           const sig = `${n.Guid}|${loser.Title ?? ''}|${loser.Content ?? ''}`;
-          const excerpt = x => `${x.Title && x.Title !== n.Title ? x.Title + ': ' : ''}${(x.Content || '').slice(0, 120)}`;
-          const winner = srcWins ? n : cur;
-          res.conflicts.push({
-            title: winner.Title || '(no title)',
-            kept: `“${excerpt(winner)}” — edited ${fmtDate(winner.LastModified)}`,
-            other: `“${excerpt(loser)}” — edited ${fmtDate(loser.LastModified)}`,
-          });
           if (oldVersionSeen.has(sig)) continue;
           oldVersionSeen.add(sig);
           const t = loser.Title ?? '';
@@ -1499,6 +1556,7 @@ async function analyze() {
   document.getElementById('step3').classList.add('hidden');
   document.getElementById('summaryArea').classList.add('hidden');
   document.getElementById('logBox').innerHTML = '';
+  document.getElementById('logDetails').open = false;
   document.getElementById('warnArea').innerHTML = '';
   document.getElementById('analyzeBtn').disabled = true;
   document.getElementById('mergeBtn').disabled = false;
@@ -1535,7 +1593,8 @@ async function analyze() {
   const a = r.added;
   log(`Will add ${plural(a.notes, 'note')}, ${plural(a.marks, 'highlight')}, ${plural(a.bookmarks, 'bookmark')}, ` +
       `${plural(a.tags, 'tag')}, ${plural(a.playlistItems, 'playlist item')}.`, 'ok');
-  if (r.conflicts.length) log(`${plural(r.conflicts.length, 'note was', 'notes were')} edited differently on two devices — both versions will be kept.`, 'warn');
+  if (r.dupMarks) log(`${plural(r.dupMarks, 'highlight was', 'highlights were')} made on both devices — kept once.`, 'ok');
+  if (r.conflicts.length) log(`${plural(r.conflicts.length, 'note was', 'notes were')} edited differently on two devices — choose what to keep below.`, 'warn');
   if (r.errors.length) log(`${plural(r.errors.length, 'record')} could not be copied (first: ${r.errors[0]}).`, 'warn');
 
   analysisResult = { files, trial: r };
@@ -1550,12 +1609,7 @@ async function analyze() {
     ['', deleted, 'probably deleted'],
   ].map(([cls, n, l]) => `<div class="summary-card ${cls}"><span class="num">${n}</span><span class="lbl">${l}</span></div>`).join('');
 
-  const tbody = document.querySelector('#conflictTable tbody');
-  tbody.innerHTML = r.conflicts.map(c => `<tr>
-      <td class="wrap">${escHtml(c.title)}</td>
-      <td class="wrap">${escHtml(c.kept)}</td>
-      <td class="wrap">${escHtml(c.other)}</td></tr>`).join('');
-  document.getElementById('conflictArea').classList.toggle('hidden', !r.conflicts.length);
+  renderConflicts(r.conflicts);
 
   renderPicks(r.candidates);
   document.getElementById('summaryArea').classList.remove('hidden');
@@ -1574,6 +1628,34 @@ function mergeProgress(files, from, to, verb) {
 function closeTrial() {
   analysisResult?.trial?.db.close();
   if (analysisResult) analysisResult.trial = null;
+}
+
+// ── Notes edited on two devices: choose what to keep ───────────────────────
+let conflictState = new Map();   // conflict key → 'both' | 'latest' | 'other'
+const CONFLICT_CHOICES = [['both', 'Both'], ['latest', 'Latest only'], ['other', 'Other only']];
+
+function renderConflicts(conflicts) {
+  conflictState = new Map(conflicts.map(c => [c.key, 'both']));
+  document.getElementById('conflictArea').classList.toggle('hidden', !conflicts.length);
+  const ver = (v, label) => `
+    <div class="conflict-version">
+      <div class="cv-head">${label} · ${escHtml(v.from)} · ${escHtml(fmtDate(v.date))}</div>
+      <div class="cv-body">${v.title ? `<b>${escHtml(v.title)}</b>\n` : ''}${escHtml(v.content) || '<span class="muted">(empty)</span>'}</div>
+    </div>`;
+  document.getElementById('conflictList').innerHTML = conflicts.map((c, i) => `
+    <div class="conflict-card">
+      <div class="item-title">${escHtml(c.title)}</div>
+      <div class="conflict-versions">${ver(c.latest, 'Latest edit')}${ver(c.other, 'Other version')}</div>
+      <div class="seg-choice">${CONFLICT_CHOICES.map(([v, l]) => `
+        <label><input type="radio" name="cf${i}" value="${v}" data-key="${escHtml(c.key)}" ${v === 'both' ? 'checked' : ''}
+          onchange="conflictState.set(this.dataset.key, this.value)">${l}</label>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function setAllConflicts(choice) {
+  for (const k of conflictState.keys()) conflictState.set(k, choice);
+  document.querySelectorAll(`#conflictList input[value="${choice}"]`).forEach(b => b.checked = true);
 }
 
 // ── "Items that will be added" list ─────────────────────────────────────────
@@ -1669,10 +1751,11 @@ async function doMerge() {
   // Only the choices that differ from the defaults matter.
   const overrides = new Map(pickItems.filter(c => pickState.get(c.key) !== !c.deletedOn).map(c => [c.key, pickState.get(c.key)]));
   const leftOut = pickItems.filter(c => !pickState.get(c.key)).length;
+  const conflictChoices = new Map([...conflictState].filter(([, v]) => v !== 'both'));
   log('---');
   let r;
   try {
-    if (!overrides.size && analysisResult.trial) {
+    if (!overrides.size && !conflictChoices.size && analysisResult.trial) {
       log('Using the trial merge — your choices match the defaults.', 'info');
       r = analysisResult.trial;
       analysisResult.trial = null;     // its database is handed over below
@@ -1680,7 +1763,7 @@ async function doMerge() {
       closeTrial();
       log(`Merging with your choices${leftOut ? ` (leaving out ${plural(leftOut, 'item')})` : ''}…`, 'info');
       setProgress(0);
-      r = await runMerge(files, { overrides, progress: mergeProgress(files, 0, 85, 'from') });
+      r = await runMerge(files, { overrides, conflictChoices, progress: mergeProgress(files, 0, 85, 'from') });
     }
   } catch (e) {
     console.error(e);
@@ -1722,6 +1805,7 @@ async function doMerge() {
   link.href = mergeUrl;
   link.download = fname;
   setupShare('shareBtn', blob, fname);
+  lastMerged = { blob, name: fname };
 
   const a = r.added;
   const parts = [plural(a.notes, 'note'), plural(a.marks, 'highlight'), plural(a.bookmarks, 'bookmark'), plural(a.tags, 'tag')];
@@ -1730,7 +1814,9 @@ async function doMerge() {
   const msg = document.getElementById('doneMsg');
   msg.className = 'alert ' + (problems.length ? 'alert-warn' : 'alert-info');
   msg.innerHTML = `Merged ${files.length} backups into <b>${escHtml(fname)}</b>. Added from older backups: ${parts.join(', ')}.` +
-    (r.conflicts.length ? `<br>${plural(r.conflicts.length, 'note was', 'notes were')} edited on two devices — the latest text is kept, the other as “[Older version] …”.` : '') +
+    (r.oldVersions ? `<br>${plural(r.oldVersions, 'note was', 'notes were')} edited on two devices — the latest text is the note, the other is kept as “[Older version] …”.` : '') +
+    (conflictChoices.size ? `<br>${plural(conflictChoices.size, 'edited note')}: kept only the version you chose.` : '') +
+    (r.dupMarks ? `<br>${plural(r.dupMarks, 'highlight was', 'highlights were')} on both devices — kept once.` : '') +
     (r.bookmarkMoved ? `<br>${plural(r.bookmarkMoved, 'bookmark')} moved to a free slot because theirs was taken.` : '') +
     (leftOut ? `<br>${plural(leftOut, 'item')} left out as you chose.` : '') +
     (problems.length ? `<br><br><b>Please check the result carefully before restoring it:</b><br>${problems.map(escHtml).join('<br>')}` : '');
@@ -1741,6 +1827,15 @@ async function doMerge() {
   document.getElementById('step3').classList.remove('hidden');
   document.getElementById('step3').scrollIntoView({ behavior: 'smooth', block: 'start' });
   btn.disabled = false;
+  link.click();   // start the download right away; the button stays for another try
+}
+
+let lastMerged = null;
+function openMergedInEditor() {
+  if (!lastMerged) return;
+  showView('edit');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  edLoad(new File([lastMerged.blob], lastMerged.name));
 }
 
 // Copies every non-database file (playlist media) into `out`; the first zip that has
@@ -1776,7 +1871,9 @@ function reset() {
   slotCount = 2;
   invalidateAnalysis();
   document.getElementById('logBox').innerHTML = '';
+  document.getElementById('statusLine').textContent = '';
   document.getElementById('warnArea').innerHTML = '';
+  lastMerged = null;
   document.querySelectorAll('#viewMerge .step-num').forEach(el => el.classList.remove('done'));
   setProgress(0);
   renderGrid();
